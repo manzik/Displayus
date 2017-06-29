@@ -6,17 +6,19 @@
   "author": "Manzik <u3fian@gmail.com>",
   "description": "Advanced plugin based live wallpaper program, will to bring your desktop to life.",
   "productName": "Displayus",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "main.js",
   "devDependencies": {
     "electron": "^1.6.11",
-    "electron-packager": "^8.7.0"
+    "electron-packager": "^8.7.0",
+    "electron-rebuild": "^1.5.11"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/Displayus/Displayus.git"
   },
   "dependencies": {
+    "ffi": "^2.2.0",
     "electron-updater": "^2.4.3",
     "auto-launch": "^5.0.1",
     "decompress-zip": "^0.3.0",
@@ -33,9 +35,13 @@
         "repo": "Displayus"
       }
     ],
-    "asarUnpack": [ "noasar\\controller\\windows\\" ],
+    "asarUnpack": [
+      "noasar\\controller\\windows\\"
+    ],
     "asar": true,
-    "directories": { "output": "..\\build" },
+    "directories": {
+      "output": "..\\build"
+    },
     "compression": "maximum",
     "forceCodeSigning": false,
     "nsis": {
@@ -45,7 +51,9 @@
       "allowElevation": true
     },
     "fileAssociations": {
-      "ext": [ "dus" ],
+      "ext": [
+        "dus"
+      ],
       "description": "Displayus Plugin",
       "icon": "dusicon.ico"
     },
@@ -55,5 +63,5 @@
         "displayus"
       ]
     }
-  }
+  },"postinstall": "electron-builder install-app-deps"
 }

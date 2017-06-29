@@ -20,12 +20,19 @@ autoupdatersendevents.forEach((ev) =>
 
 var alreadyrunning = app.makeSingleInstance(function (commandLine, workingDirectory)
 {
+    console.log(JSON.stringify(commandLine));
     if (commandLine.length == 2)
     {
-        if (commandLine[1].toLowerCase().indexOf("displayus://") === 0)
+        var cmdo = commandLine[1];
+        if (cmdo.indexOf("displayus://") === 0)
         {
             onprotcall(commandLine[1].split("displayus://").join(""));
         }
+        else
+            if (cmdo.substring(cmdo.length - 3) === "dus")
+            {
+                onopenwith(cmdo);
+            }
     }
     if (mainwindow)
     {
@@ -114,6 +121,10 @@ function mouseevent(button, type)
     });
 }
 
+function onopenwith(cmd)
+{
+    mainwindow.send("asynchronous-reply", JSON.stringify({ type: "openwith", data: { command: cmd } }));
+}
 function onprotcall(cmd)
 {
     mainwindow.send("asynchronous-reply", JSON.stringify({ type: "protocolcall", data: { command: cmd } }));
@@ -137,13 +148,30 @@ function handlehexfromwindow(window)
 
 var previewwalls = [];
 
-function newwall(arg)
+let animatewindow = require("ffi").Library("User32.dll", {
+    'AnimateWindow': ['bool', ['int', 'int', 'int']],
+    'ShowWindow': ['bool', ['int', 'int']]
+})
+
+function forceredraw(time, interval)
+{
+    var start = Date.now();
+    function sendredraw()
+    {
+        mainwindow.send("asynchronous-reply", JSON.stringify({ type: "forceredraw", data: {  } }));
+        if (Date.now() - start < time)
+            setTimeout(sendredraw, interval);
+    }
+    setTimeout(sendredraw, interval);
+}
+
+function newwall(arg, rembg)
 {
 
     var title = "displayus" + (Math.random() * Math.pow(10, 16)).toFixed(0);
 
     var bwopts = {
-        title: title, frame: false, kiosk: true, show: false, taskbar: false, skipTaskbar: true, webPreferences: {
+        title: title, frame: false, titleBarStyle: "hidden", kiosk: true, show: false, taskbar: false, skipTaskbar: true, backgroundColor: '#000000', webPreferences: {
             preload: __dirname + "\\displayus.js"/*displayusscript+";displayus.plugin='"+arg.data.plugin+"';displayus.item="+JSON.stringify(arg.data.item)+";"*/
         }
     };
@@ -156,10 +184,12 @@ function newwall(arg)
             bwopts[opt] = arg.data.bw[opt];
         });
     }
+    /*
     if (systempreferences.isAeroGlassEnabled())
     {
         bwopts.transparent = true;
     }
+    */
     if (arg.data.plugin === "test")
     {
         bwopts.kiosk = false;
@@ -179,32 +209,55 @@ function newwall(arg)
     newwall.webContents.window = newwall;
     newwall.webContents.plugin = arg.data.plugin;
     newwall.webContents.previewtype = arg.data.previewtype;
+
+    newwall.showInactive();
+    animatewindow.ShowWindow.async(newwall.getNativeWindowHandle().readInt32LE(0), 0, () => { });
+
     (function (title, window)
     {
+
+
+
         window.on("ready-to-show", () =>
         {
-            if (arg.data.plugin !== "test")
+            socketobj["setasbackgroundbyhandlehex"] = handlehexfromwindow(window);
+            senddata();
+
+            forceredraw(400, 20);
+
+            //https://github.com/electron/electron/issues/2407#issuecomment-252451568
+            animatewindow.AnimateWindow.async(window.getNativeWindowHandle().readInt32LE(0), 400, 524288, () =>
             {
-                socketobj["setasbackgroundbyhandlehex"] = handlehexfromwindow(window);
-                senddata();
-            }
-            else
-                setTimeout(() =>
-                {
-                    socketobj["setasbackgroundbyhandlehex"] = handlehexfromwindow(window);
-                    senddata();
-                }, 2000);
+                rembg && rembg();
+
+                if (arg.data.preview)
+                    previewwalls.push({ window: newwall, plugin: arg.data.plugin, item: arg.data.item, apptype: "js", preview: true, renderstatus: { reasonsnotto: [], isrendering: true } });
+                else
+                    walls.push({ window: newwall, plugin: arg.data.plugin, item: arg.data.item, apptype: "js", renderstatus: { reasonsnotto: [], isrendering: true } });
+
+                setnopendingbackgroundchange();
+            });
 
 
-            window.show();
+
+
+
+
+
+
         });
     })(title, newwall);
 
-    if (arg.data.preview)
-        previewwalls.push({ window: newwall, plugin: arg.data.plugin, item: arg.data.item, apptype: "js", preview: true, renderstatus: { reasonsnotto: [], isrendering: true } });
-    else
-        walls.push({ window: newwall, plugin: arg.data.plugin, item: arg.data.item, apptype: "js", renderstatus: { reasonsnotto: [], isrendering: true } });
+
     activated = true;
+}
+
+function setnopendingbackgroundchange()
+{
+    changingbackground = false;
+    if (arr_backgroundchangedcb[0])
+        arr_backgroundchangedcb[0]();
+    arr_backgroundchangedcb.splice(0, 1);
 }
 
 function closewalls()
@@ -227,7 +280,8 @@ function closewalls()
 }
 function sendcurrentpointing(pointing)
 {
-    mainwindow.send("asynchronous-reply", JSON.stringify({ type: "currentpointerpointing", data: { pointing: pointing } }));
+    if (mainwindow)
+        mainwindow.send("asynchronous-reply", JSON.stringify({ type: "currentpointerpointing", data: { pointing: pointing } }));
 }
 var cswalls = [];
 function newcswall(args)
@@ -313,7 +367,7 @@ function anotherwindowfullscreenchanged()
     checkrenderstatus()
     */
 }
-
+var changingbackground = false,arr_backgroundchangedcb=[];
 var ipcMain = require('electron').ipcMain, walls = [], mainwindowevent, newitem = {}, activated = false;
 function onmessage(event, arg)
 {
@@ -435,81 +489,113 @@ function onmessage(event, arg)
                 newwall(newitem.arg);
 
             }
+            setnopendingbackgroundchange();
             break;
         case "newwall":
-            if (arg.data.preview)
+            var changeit = () =>
             {
-                if (arg.data.apptype == "js")
-                {
-                    if (previewwalls[0])
-                    {
-
-                        removingwall = previewwalls[0];
-                        if (removingwall.apptype == "js")
-                        {
-
-                            try
-                            {
-
-                                previewwalls[0].window.close();
-
-                            } catch (e) { }
-                            previewwalls[0].window = null;
-                            previewwalls.splice(0, 1);
-                        }
-                        else
-                            if (removedwall.apptype == "cs")
-                            {
-
-                            }
-                    }
-
-                    newwall(arg);
-                }
-                else
-                    if (arg.data.apptype == "cs")
-                        newcswall(arg);
-            }
-            else
-            {
-                if (walls[0] && walls[0].plugin == arg.data.plugin && activated)
-                {
-                    if (!arg.data.item)
-                        return;
-                    newitem.item = arg.data.item;
-                    newitem.arg = arg;
-                    walls.forEach(function (wall)
-                    {
-                        if (wall)
-                        {
-                            if (wall.apptype == "js")
-                                wall.window.webContents.send("asynchronous-reply", JSON.stringify({ type: "event", data: { type: "checknewitemeventhandler", args: [] } }));
-                            else
-                                if (wall.apptype == "cs")
-                                    wall.cp.stdin.write(JSON.stringify({ type: "event", data: { type: "checknewitemeventhandler", args: [] } }) + "\n");
-
-                        }
-                    });
-                }
-                else
+                changingbackground = true;
+                if (arg.data.preview)
                 {
                     if (arg.data.apptype == "js")
                     {
-                        walls.forEach((wall, i) =>
+                        var rembg = undefined;
+                        if (previewwalls[0])
                         {
-                            socketobj["removefrombackgroundbyhandlehex"] = handlehexfromwindow(wall.window);
-                            senddata();
-                            wall.window.close();
-                            wall.window = null;
-                            walls.splice(i, 1);
-                        });
-                        newwall(arg);
+
+                            removingwall = previewwalls[0];
+                            if (removingwall.apptype == "js")
+                            {
+                                rembg = () =>
+                                {
+                                    animatewindow.AnimateWindow.async(previewwalls[0].window.getNativeWindowHandle().readInt32LE(0), 400, 589824, () =>
+                                    {
+                                        socketobj["removefrombackgroundbyhandlehex"] = handlehexfromwindow(previewwalls[0].window);
+                                        senddata();
+                                        previewwalls[0].window.close();
+                                        previewwalls[0].window = null;
+                                        previewwalls.splice(0, 1);
+                                    });
+                                }
+
+                            }
+                            else
+                                if (removedwall.apptype == "cs")
+                                {
+
+                                }
+                        }
+
+                        newwall(arg, rembg);
                     }
                     else
                         if (arg.data.apptype == "cs")
                             newcswall(arg);
                 }
+                else
+                {
+                    if (walls[0] && walls[0].plugin == arg.data.plugin && activated)
+                    {
+                        if (!arg.data.item)
+                            return;
+                        newitem.item = arg.data.item;
+                        newitem.arg = arg;
+                        walls.forEach(function (wall)
+                        {
+                            if (wall)
+                            {
+                                if (wall.apptype == "js")
+                                    wall.window.webContents.send("asynchronous-reply", JSON.stringify({ type: "event", data: { type: "checknewitemeventhandler", args: [] } }));
+                                else
+                                    if (wall.apptype == "cs")
+                                        wall.cp.stdin.write(JSON.stringify({ type: "event", data: { type: "checknewitemeventhandler", args: [] } }) + "\n");
+
+                            }
+                        });
+                    }
+                    else
+                    {
+                        if (arg.data.apptype == "js")
+                        {
+                            var didremoveprevbackground = false;
+
+
+
+                            newwall(arg, () =>
+                            {
+                                walls.forEach((wall, i) =>
+                                {
+                                    didremoveprevbackground = true;
+                                    animatewindow.AnimateWindow.async(wall.window.getNativeWindowHandle().readInt32LE(0), 400, 589824, () =>
+                                    {
+
+                                        setTimeout(() =>
+                                        {
+                                            socketobj["removefrombackgroundbyhandlehex"] = handlehexfromwindow(wall.window);
+                                            senddata();
+                                            wall.window.close();
+                                            wall.window = null;
+                                            walls.splice(0, 1);
+                                        }
+                                            , 0);
+
+
+                                    });
+                                });
+                            });
+                        }
+                        else
+                            if (arg.data.apptype == "cs")
+                                newcswall(arg);
+                    }
+                }
             }
+            if (changingbackground)
+            {
+                arr_backgroundchangedcb.push(changeit);
+            }
+            else
+                changeit();
             break;
         case "getitem":
             event.sender.send('asynchronous-reply', JSON.stringify({ type: "cb", data: { arguments: (event.sender.item ? [event.sender.previewtype === "add" ? undefined : event.sender.item] : undefined), id: arg.data.id, type: "item" } }))
@@ -522,6 +608,7 @@ function onmessage(event, arg)
             senddata();
             break;
         case "removefrombackground":
+
             socketobj["removefrombackgroundbyhandlehex"] = handlehexfromwindow(event.sender.window);
             senddata();
             break;
@@ -530,13 +617,16 @@ function onmessage(event, arg)
             {
                 if (pw.apptype == "js")
                 {
-                    socketobj["removefrombackgroundbyhandlehex"] = handlehexfromwindow(pw.window);
-                    senddata();
-                    pw.window.close();
-                    pw.window = null;
+                    animatewindow.AnimateWindow.async(pw.window.getNativeWindowHandle().readInt32LE(0), 400, 589824, () =>
+                    {
+                        socketobj["removefrombackgroundbyhandlehex"] = handlehexfromwindow(pw.window);
+                        senddata();
+                        pw.window.close();
+                        pw.window = null;
 
-                    previewwalls.splice(i, 1);
+                        previewwalls.splice(i, 1);
 
+                    });
 
                 }
                 else
@@ -658,7 +748,7 @@ function senddata()
     var socketreqs = [];
     for (var key in socketobj)
     {
-            socketreqs.push(key + "=" + socketobj[key]);
+        socketreqs.push(key + "=" + socketobj[key]);
     }
     cpsharp.stdin.write((socketreqs.join("|") || " ") + "\n");
     console.log((socketreqs.join("|") || " ") + "\n");
@@ -680,19 +770,16 @@ function getunpackeddir(dir)
 }
 function startcsharp()
 {
-    cpsharp = cp.spawn(getunpackeddir("noasar\\controller\\windows\\_DisplayusController.exe"), { maxBuffer: 1000 * 1000 * 1000, detached: false });
-    //cp.stdin.setEncoding('utf-8');
+    cpsharp = cp.spawn(getunpackeddir("noasar\\controller\\windows\\_DisplayusController.exe"));
+    
     cpsharp.stdout.on('data', function (data)
     {
         data = data + "";
-        if (false && data.indexOf("none") < 0)
-            console.log(data);
         if (data != "none" && typeof (data) == "string")
         {
             data.split("\r\n").map(function (x) { processdata(x); });
         }
     });
-    cpsharp.stderr.pipe(process.stderr);
 }
 function desktopiconcursorchange(ind)
 {
@@ -729,7 +816,6 @@ function processdata(data)
             switch (dataarr[i][0])
             {
                 case "anotherwindowfullscreen":
-                    console.log(dataarr[i][1].toLowerCase() == "true");
                     anotherwindowfullscreen = dataarr[i][1].toLowerCase() == "true";
                     break;
                 case "anotherwindowfullscreenchanged":

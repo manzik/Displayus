@@ -15,10 +15,8 @@
     <script src="js/bootstrap.min.js"></script>
     <script src="js/material.min.js"></script>
     <link href="css/waves.min.css" rel="stylesheet">
-    <link href="css/jquery-ui.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/bootstrap.min.css">
     <script src="js/jquery-ui.min.js"></script>
-    <script src="js/waves.min.js"></script>
     <script src="js/jquery-confirm.min.js"></script>
     <style>
         div.developerspan {
@@ -49,7 +47,6 @@
         }
     </style>
     <script>
-
         var electron = require('electron'), currentwindow = require('electron').remote.getCurrentWindow(), remote = require('electron').remote, dialog = remote.dialog, BrowserWindow = remote.BrowserWindow
             , fs = require("fs"), path = require("path"), ipcRenderer = electron.ipcRenderer, http = require("http"), url = require('url'), request = require("request"), app = remote.app, displayussite = "127.0.0.1", rimraf = require('rimraf'), appversion = app.getVersion(), screen = electron.screen, mainscreen = screen.getPrimaryDisplay();
         var defaultsettingsjson = '{"changeinterval":900000,"exitopt":"ask","autoupdateplugins":"auto","autoupdateapp":0}';
@@ -325,7 +322,6 @@
                                     calcpercents(currentpage == "additemfromplugins" ? true : false);
                                     if (deletewhendone)
                                         fs.unlink(file);
-                                    console.log(plugin, plugins.data[plugin]);
                                     pluginclick(plugin, () => { }, true);
                                 });
 
@@ -616,7 +612,7 @@
         var sideprev = { y: -10 };
         function onresize()
         {
-
+            winSize = currentwindow.getSize();
             if (insidepreview)
             {
                 newposition = currentwindow.getPosition();
@@ -1139,6 +1135,7 @@
         }
         window.addEventListener("load", function ()
         {
+            
             setdevtoolsev();
             var db = JSON.parse(fs.readFileSync(path.join(userdata, "database.json")));
             getwebsiteinfo(displayussite, function ()
@@ -1269,6 +1266,7 @@
 
                 }
             }
+            
             for (var i = 0, dirs = getDirectories(path.join(userdata, "plugins")); i < dirs.length; i++)
             {
                 plugin = dirs[i];
@@ -1303,7 +1301,7 @@
                         setTimeout(function ()
                         {
                             if (plugins.data[plugin].main)
-                            plugins.data[plugin].main(plugins.data[plugin].controller);
+                                plugins.data[plugin].main(plugins.data[plugin].controller);
                         }, 0);
                     } catch (e) { console.error(e); }
                 }
@@ -1317,6 +1315,7 @@
                 */
                 arr_loadplugins.push(plugin);
             }
+
             function nxtadditemsfromplugin(ind)
             {
                 if (arr_loadplugins[ind])
@@ -1327,17 +1326,22 @@
                     arr_loadplugins = [];
                 }
             }
+            
             itemcards.innerHTML = "";
             nxtadditemsfromplugin(0);
-
+            
 
         });
         function loadeditems()
         {
+            changewall();
+            
+            inittopbarmenu();
+            
             //itemcards.innerHTML += ('<div class="additem" id="additem" onclick="if(event.target.getAttribute(\'itemclick\'))additemclick()"  itemclick="true"><span style="position:absolute;top:50%;text-align:center;font-size:40px;transform:translateY(-50%)  translateX(-50%);margin:0;">+</span> </div>');
             setpositions("itemcards");
-            changewall();
-            inittopbarmenu();
+            
+            
         }
         var arr_loadplugins = [];
         function globalsettings()
@@ -1477,14 +1481,31 @@
                 }
             });
         }
+        
         var cursoronelectronwindow = false;
         var mousepos = { x: 0, y: 0 };
+        var togg = false;
         var anotherwindowfullscreen = false;
+        function forceredraw()
+        {
+            var prevcond = currentwindow.isAlwaysOnTop();
+            currentwindow.setAlwaysOnTop(!prevcond);
+            currentwindow.setAlwaysOnTop(prevcond);
+        }
         ipcRenderer.on('asynchronous-reply', (event, arg) =>
         {
             arg = JSON.parse(arg);
             switch (arg.type)
             {
+                case "forceredraw":
+                    forceredraw();
+                    break;
+                case "openwith":
+                    var job = createjob();
+                    job.desc = "Extracting plugin package";
+                    setincurrentjobs(job);
+                    addpluginfromfile(arg.data.command, false, job);
+                    break;
                 case "autoupdater":
                     var type = arg.data.type;
                     var args = arg.data.args;
@@ -1591,6 +1612,7 @@
                         case "mousemove":
                             mousepos.x = arg.data.args[0];
                             mousepos.y = arg.data.args[1];
+                            mousemoveev(mousepos);
                             break;
                         case "mouseevent":
                             globalmouseevent(arg.data.args[0], arg.data.args[1]);
@@ -2333,37 +2355,37 @@
             });
         }
 
-
-        window.addEventListener("load", function ()
-        {
-
-            //https://stackoverflow.com/a/18120786
-            Element.prototype.remove = function ()
+        winCoord = currentwindow.getPosition(),
+            winSize = currentwindow.getSize();
+        var mousemoveev = () => { };
+        
+            window.addEventListener("load", function ()
             {
-                this.parentElement.removeChild(this);
-            }
-            NodeList.prototype.remove = HTMLCollection.prototype.remove = function ()
-            {
-                for (var i = this.length - 1; i >= 0; i--)
+
+                //https://stackoverflow.com/a/18120786
+                Element.prototype.remove = function ()
                 {
-                    if (this[i] && this[i].parentElement)
+                    this.parentElement.removeChild(this);
+                }
+                NodeList.prototype.remove = HTMLCollection.prototype.remove = function ()
+                {
+                    for (var i = this.length - 1; i >= 0; i--)
                     {
-                        this[i].parentElement.removeChild(this[i]);
+                        if (this[i] && this[i].parentElement)
+                        {
+                            this[i].parentElement.removeChild(this[i]);
+                        }
                     }
                 }
-            }
 
-            currentwindow.on("resize", onresize);
+                currentwindow.on("resize", onresize);
+                currentwindow.on("move", () => { winCoord = currentwindow.getPosition(); });
 
-
-            //https://gist.github.com/louisameline/1213bb112c6cb12a98b2ab525dfb8b07
-            var wind = electron.remote.getCurrentWindow(),
-                mouseIsOn = function ()
+                //https://gist.github.com/louisameline/1213bb112c6cb12a98b2ab525dfb8b07
+                mouseIsOn = function (mousep)
                 {
 
-                    var systemMouseCoord = electron.screen.getCursorScreenPoint(),
-                        winCoord = wind.getPosition(),
-                        winSize = wind.getSize();
+                    var systemMouseCoord = mousep || electron.screen.getCursorScreenPoint();
                     var inwindow = !(systemMouseCoord.x < winCoord[0]
                         || systemMouseCoord.x > winCoord[0] + winSize[0]
                         || systemMouseCoord.y < winCoord[1]
@@ -2378,81 +2400,81 @@
                     else
                         return false;
                 };
-            wind.setMenu(null);
-            document.addEventListener('contextmenu', event => event.preventDefault());
-            var closebutton = document.getElementById("closebutton");
-            var maximizebutton = document.getElementById("maximizebutton");
-            var minimizebutton = document.getElementById("minimizebutton");
-            closebutton.addEventListener("click", function ()
-            {
-                currentwindow.close();
-            });
-            var maximized = false;
-            maximizebutton.addEventListener("click", function ()
-            {
-                maximized = !maximized;
-                !maximized ? currentwindow.unmaximize() : currentwindow.maximize();
-            });
-            minimizebutton.addEventListener("click", function ()
-            {
-                currentwindow.minimize();
-            });
-            var topbuttons = {
-                close: {
-                    is: false, should: false, toggle: function (tog)
-                    {
-                        if (tog)
-                        {
-                            closebutton.style.backgroundColor = "rgba(255,25,25,0.9)";
-                        }
-                        else
-                        {
-                            closebutton.style.backgroundColor = "rgba(255,255,255,0.7)";
-                        }
-                    }
-                }, maximize: {
-                    is: false, should: false, toggle: function (tog)
-                    {
-                        if (tog)
-                        {
-                            maximizebutton.style.backgroundColor = "rgba(220,220,220,0.9)";
-                        }
-                        else
-                        {
-                            maximizebutton.style.backgroundColor = "rgba(255,255,255,0.7)";
-                        }
-                    }
-                }, minimize: {
-                    is: false, should: false, toggle: function (tog)
-                    {
-                        if (tog)
-                        {
-                            minimizebutton.style.backgroundColor = "rgba(220,220,220,0.9)";
-                        }
-                        else
-                        {
-                            minimizebutton.style.backgroundColor = "rgba(255,255,255,0.7)";
-                        }
-                    }
-                }
-            };
-            var onapp = false;
-            var currentElement = null;
-            setInterval(function ()
-            {
-                var ison = mouseIsOn();
-                for (var key in topbuttons)
+                currentwindow.setMenu(null);
+                document.addEventListener('contextmenu', event => event.preventDefault());
+                var closebutton = document.getElementById("closebutton");
+                var maximizebutton = document.getElementById("maximizebutton");
+                var minimizebutton = document.getElementById("minimizebutton");
+                closebutton.addEventListener("click", function ()
                 {
-                    var button = topbuttons[key];
-                    button.should = ison === key;
-                    if (button.should !== button.is && (!button.should || cursoronelectronwindow))
+                    currentwindow.close();
+                });
+                var maximized = false;
+                maximizebutton.addEventListener("click", function ()
+                {
+                    maximized = !maximized;
+                    !maximized ? currentwindow.unmaximize() : currentwindow.maximize();
+                });
+                minimizebutton.addEventListener("click", function ()
+                {
+                    currentwindow.minimize();
+                });
+                var topbuttons = {
+                    close: {
+                        is: false, should: false, toggle: function (tog)
+                        {
+                            if (tog)
+                            {
+                                closebutton.style.backgroundColor = "rgba(255,25,25,0.9)";
+                            }
+                            else
+                            {
+                                closebutton.style.backgroundColor = "rgba(255,255,255,0.7)";
+                            }
+                        }
+                    }, maximize: {
+                        is: false, should: false, toggle: function (tog)
+                        {
+                            if (tog)
+                            {
+                                maximizebutton.style.backgroundColor = "rgba(220,220,220,0.9)";
+                            }
+                            else
+                            {
+                                maximizebutton.style.backgroundColor = "rgba(255,255,255,0.7)";
+                            }
+                        }
+                    }, minimize: {
+                        is: false, should: false, toggle: function (tog)
+                        {
+                            if (tog)
+                            {
+                                minimizebutton.style.backgroundColor = "rgba(220,220,220,0.9)";
+                            }
+                            else
+                            {
+                                minimizebutton.style.backgroundColor = "rgba(255,255,255,0.7)";
+                            }
+                        }
+                    }
+                };
+                var onapp = false;
+                var currentElement = null;
+                mousemoveev = function (e)
+                {
+                    var ison = mouseIsOn(e);
+                    for (var key in topbuttons)
                     {
-                        button.toggle(button.should);
-                        button.is = button.should;
+                        var button = topbuttons[key];
+                        button.should = ison === key;
+                        if (button.should !== button.is && (!button.should || cursoronelectronwindow))
+                        {
+                            button.toggle(button.should);
+                            button.is = button.should;
+                        }
                     }
                 }
-            }, 60);
-        });
+            });
     </script>
 </head>
 
@@ -2486,8 +2508,8 @@
             <div id="additembutton" title="Add Item" onclick="additem()" class="topbutton additembutton" style="width:60px;height:100%;float:right;opacity:1;display:block;"><span id="backtext" style="font-size:1.1em;text-align:center;top:0% !important;transform:translateY(-100%) translateX(-50%);left:50%;z-index:10;"><img src="icons/add.svg" style="height:100%;width:100%;opacity:0.7;transform:scale(0.6);" /></span></div>
             <div id="globalsettingsbutton" title="Settings" onclick="globalsettings()" class="topbutton settingsbutton" style="width:60px;height:100%;float:right;right:0px;opacity:1;display:block;"><span id="backtext" style="font-size:1.1em;text-align:center;top:0% !important;transform:translateY(-100%) translateX(-50%);left:50%;z-index:10;"><img src="icons/settings.svg" style="height:100%;width:100%;opacity:0.7;transform:scale(0.6);" /></span></div>
             <div id="managepluginsbutton" title="Manage Plugins" onclick="manageplugins()" class="topbutton" style="width:60px;height:100%;float:right;right:0px;opacity:1;display:block;"><span id="backtext" style="font-size:1.1em;text-align:center;top:0% !important;transform:translateY(-100%) translateX(-50%);left:50%;z-index:10;"><img src="icons/plugin.png" style="height:100%;width:100%;opacity:0.7;transform:scale(0.5,0.6);" /></span></div>
-            <div id="backbutton" onclick="backbutton()"  title="Back" class="topbutton backbutton" style="width:60px;height:100%;float:right;right:0px;"><span id="backtext" style="font-size:1.1em;text-align:center;top:0% !important;transform:translateY(-100%) translateX(-50%);left:50%;z-index:10;"><img src="icons/left.svg" style="height:100%;width:100%;opacity:0.7;transform:scale(0.6);" /></span></div>
-            <div id="settingsbutton" onclick="pluginsettings()"  title="Settings" class="topbutton settingsbutton" style="width:150px;height:100%;float:right;right:0px;opacity:0;display:none;"><span id="backtext" style="font-size:1.1em;text-align:center;position:absolute;top:50%;transform:translateY(-50%) translateX(-50%);left:50%;">Plugin Settings</span></div>
+            <div id="backbutton" onclick="backbutton()" title="Back" class="topbutton backbutton" style="width:60px;height:100%;float:right;right:0px;"><span id="backtext" style="font-size:1.1em;text-align:center;top:0% !important;transform:translateY(-100%) translateX(-50%);left:50%;z-index:10;"><img src="icons/left.svg" style="height:100%;width:100%;opacity:0.7;transform:scale(0.6);" /></span></div>
+            <div id="settingsbutton" onclick="pluginsettings()" title="Settings" class="topbutton settingsbutton" style="width:150px;height:100%;float:right;right:0px;opacity:0;display:none;"><span id="backtext" style="font-size:1.1em;text-align:center;position:absolute;top:50%;transform:translateY(-50%) translateX(-50%);left:50%;">Plugin Settings</span></div>
         </div>
         <div style="background-color:white;width:100%;height:calc(100% - 50px);top:100px;position:fixed;left:0;opacity:0;z-index:2;overflow-y:auto;display:none;"
              id="addplugincont">

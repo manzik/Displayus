@@ -645,6 +645,10 @@ namespace Displayus
         private static extern bool SetForegroundWindow(IntPtr hwnd);
         static IntPtr basebackground = IntPtr.Zero;
         static List<IntPtr> overlayitems = new List<IntPtr>();
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool IsWindow(IntPtr hWnd);
+
         private static void checksock(string input)
         {
 
@@ -686,7 +690,8 @@ namespace Displayus
                 {
 
                     wallpaperhandle = new IntPtr(Convert.ToInt32(reqdata[1], 16));
-
+                    if (!IsWindow(wallpaperhandle))
+                        continue;
                     if (iswindows7)
                     {
                         IntPtr hwndParent = FindWindow("Progman", null);
@@ -763,7 +768,10 @@ namespace Displayus
                         senddata();
                     }
                     */
-                    W32.SetParent(new IntPtr(Convert.ToInt32(reqdata[1], 16)), IntPtr.Zero);
+                    var removingwallpaperhandle = new IntPtr(Convert.ToInt32(reqdata[1], 16));
+                    if (!IsWindow(removingwallpaperhandle))
+                        continue;
+                    W32.SetParent(removingwallpaperhandle, IntPtr.Zero);
                 }
                 else
                     if (reqdata[0] == "removefrombackground")
