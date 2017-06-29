@@ -1,0 +1,227 @@
+﻿
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <script src="js/color-thief.min.js"></script>
+    <link href="css/material/material.min.css" rel="stylesheet" />
+    <link href="css/main.css" rel="stylesheet" />
+    <style>
+        @import url('https://fonts.googleapis.com/css?family=Open+Sans');
+        .versionspan
+        {
+            bottom: 10px;
+            margin-left:10px;
+            left:0;
+            position:absolute;
+            float:left;
+        }
+        .developerspan
+        {
+
+        }
+        html 
+        {
+            height: 100%;
+            -webkit-background-size: cover;
+            -moz-background-size: cover;
+            -o-background-size: cover;
+            background-size: cover;
+            background: #70bg32;
+            background-repeat: no-repeat;
+            background: linear-gradient( to left top, blue, red);
+        }
+
+        .container 
+        {
+            font-family: 'Open Sans', sans-serif;
+            width: 400px;
+            min-height: 350px;
+            height: 500px;
+            top: 50%;
+            left: 50%;
+            background: linear-gradient(to top, #6a67cf, #f06c6c); /*Standard*/
+            box-shadow: 0 0 15px #333;
+            position: absolute;
+            overflow: auto;
+            transform: translate(-50%, -50%);
+            border-radius: 5px;
+            filter: brightness(150%);
+        }
+
+        #infotitle {
+            text-align: center;
+            margin-right: 10px;
+            margin: auto;
+            margin-top: 10px;
+        }
+
+        #infover {
+            margin-left: 10px;
+            margin-right: 10px;
+            font-size: 12px;
+        }
+
+        #infodesc {
+            margin-left: 10px;
+            margin-right: 10px;
+            word-break: break-word;
+        }
+
+        .f-1 {
+            text-align: center;
+            margin: auto;
+            margin-top: 10px;
+        }
+
+        .f-2 {
+            text-align: left;
+            margin-left: 20px;
+            margin: auto;
+        }
+    </style>
+    <script>
+        var electron = require("electron"), remote = electron.remote, app = remote.app, shell = electron.shell;
+        var userdata = app.getPath("userData");
+        function openurl(url,event)
+        {
+            event.preventDefault();
+            console.log(url);
+            shell.openExternal(url);
+        }
+        function itemimgload(img, itemid, isplugin)
+        {
+            var cont = document.getElementById((isplugin ? "plugin-" : "item-") + itemid);
+            var c = document.querySelector("#" + (isplugin ? "plugin-" : "item-") + itemid + " > canvas");
+            if (c)
+            {
+            }
+            else
+            {
+                c = document.createElement("canvas");
+                c.height = 250;
+                c.width = 250;
+                c.style.position = "absolute";
+                c.style.left = "0px";
+                c.style.top = "250px";
+                c.style.zIndex = "-1";
+                c.setAttribute("class", "bluritemcanvas");
+                cont.appendChild(c);
+            }
+            var ctx = c.getContext("2d");
+            /*
+            ctx.clearRect(0, 0, c.width, c.height);
+            ctx.drawImage(img, 0, 0, c.width, 75);
+            boxBlurCanvasRGBA(c, 0, 0, c.width, c.height, 0);
+            */
+
+
+        }
+        function setpositions(x)
+        {
+            var cont = document.getElementById(x);
+
+            var pluginitems = cont.children;
+            var cols = Math.min(Math.floor((innerWidth - itemsmargin.x) / (itemsdime.width + itemsmargin.x)), pluginitems.length);
+
+            var itemsmarginx = itemsmargin.x + (innerWidth - (Math.floor(cols) * (itemsdime.width + itemsmargin.x) + itemsmargin.x)) / (cols + 1);
+            cols = Math.floor(cols);
+            var rows = Math.floor(pluginitems.length / cols);
+            var lastx;
+            for (var i = 0, itemsl = pluginitems.length; i < itemsl; i++)
+            {
+                var item = pluginitems[i];
+                var marginx = itemsmarginx;
+                item.style.left = ((i % cols)) * (marginx + itemsdime.width) + marginx + "px";
+                item.style.top = (Math.floor(i / cols)) * (itemsmargin.y + itemsdime.height) + itemsmargin.y * 2 + "px";
+            }
+            $(cont).height(rows * 250 - 60 + (x == "plugincards" ? 440 : 0));
+        }
+        function loadedplugindata(data)
+        {
+            plugin = data.name;
+
+            document.head.title = "test";
+           
+            var sett = sett || {};
+            sett.buttons = sett.buttons || {};
+            var buttons = sett.buttons;
+            var userdata = app.getPath("userData");
+            buttons.plugin = buttons.plugin || {};
+            var infob, viewb, deleteb, installb;
+
+            var pcih = document.getElementById("plugincards").innerHTML, pcihi = pcih.indexOf('<div class="addplugin" id="addplugin"');
+
+            var addtxt = ('<div style="cursor:pointer !important;margin:0;background-color:rgba(0,0,0,0);box-shadow:none;" class="card" onmouseout="this.style.height=itemsdime.height+\'px\';document.getElementById(\'buttons-plugin-' + plugin + '\').style.height=\'0px\';this.style.zIndex=\'0\'" onmouseover="this.style.height=itemsdime.height+75+\'px\';document.getElementById(\'buttons-plugin-' + plugin + '\').style.height=\'200px\';this.style.zIndex=\'10\';" id="plugin-' + plugin + '" onclick="if(event.target.getAttribute(\'itemclick\'))pluginclick(\'' + plugin + '\')" plugin="' + plugin + '" itemclick="true"> <img onload="itemimgload(this,\'' + plugin + '\',true)"  itemclick="true" id="infoimg" class="card-img-top img-fluid" src="' + data.preview + '" alt="Card image cap"> <div class="card-block"> <div style="left:0;width:250px;margin:0;position:relative;" itemclick="true">' + '<h4 class="card-title" > ' + data.title + '</h4>' + '<p class="card-text">' + "" + '</p></div><div class="buttons-plugin" id="buttons-plugin-' + plugin + '">' + '</div> </div> </div>');;
+            if (data.version)
+                addtxt += '<h4 class="card-title" style="top:300px;position:absolute;font-size:12px;left:50px !important;margin:0px;">Version: ' + data.version + '</h4>';
+            if (data.author)
+                addtxt += '<h4 class="card-title" style="top:300px;position:absolute;font-size:14px;float:right;left:225px !important;margin:0px;font-weight:500;">Dev: ' + data.author.split("<")[0] + '</h4>';
+            if (data.website)
+                addtxt += '<h4 class="card-title" style="top:305px;position:relative;font-size:14px;float:right;left: -20px !important;margin-top:25px;font-weight:500;width:400px;text-align:center;transform:translateX(+50%)"><span style="">Website: <a style="color:blue" href="#" onclick="openurl(\'' + data.website+'\',event);">' + data.website + '</a><span></h4>';
+            if (data.description)
+                addtxt += '<h4 class="card-title" style="top:365px;position:absolute;font-size:16px;margin-left:50px;margin-right:25px;word-wrap:break-word;width:300px;overflow:visible;margin-bottom:25px;height:auto !important;font-weight:600;"> ' + data.description + '</h4>';
+            if (pcihi > -1)
+            {
+                var newaddedelement = document.createElement("div");
+
+                document.getElementById("plugincards").insertBefore(newaddedelement, document.getElementById("addplugin"))
+                newaddedelement.outerHTML = addtxt;
+            }
+            else
+                document.getElementById("plugincards").innerHTML += addtxt;
+            setTimeout(function ()
+            {
+                setpositions("plugincards");
+            }, 0);
+        }
+        
+        var value = 2;
+        function contra(c)
+        {
+            return Math.round(((((c / 255) - 0.5) * value) + 0.5) * 255);
+        }
+        function setinfos(data,pluginpath)
+        {
+            loadedplugindata(data);
+            var infoimg = document.getElementById("infoimg");
+            infoimg.src = data.preview;
+            infoimg.addEventListener("load", function ()
+            {
+                var colorThief = new ColorThief();
+                var html = document.getElementsByTagName("html")[0];
+                var cont = document.getElementsByClassName("container")[0];
+                var colors = colorThief.getPalette(infoimg, 5).map(function (a) { return a.map(contra); }).sort(function (a, b) { var aa = (Math.abs(a[0] - a[1]) + Math.abs(a[2] - a[1]) + Math.abs(a[0] - a[2])) / 3, bb = (Math.abs(b[0] - b[1]) + Math.abs(b[2] - b[1]) + Math.abs(b[0] - b[2])) / 3; return bb - aa; }).map(function (x) { return "rgb(" + x[0] + "," + x[1] + "," + x[2] + ")"; });
+                html.style.background = "linear-gradient( to left top, " + colors[0] + ", " + colors[1] + ")";
+                cont.style.background = "linear-gradient( to left top, " + colors[0] + ", " + colors[1] + ")";
+            });
+            
+        }
+        function onload(data)
+        {
+            setinfos(data);
+        }
+
+    </script>
+</head>
+<body>
+
+    <div class="container">
+        <div style="filter:brightness(66.66666%);">
+            <div style="width:150px;height:200px;left:25%;transform:translate(-22.5%);position:absolute;" id="plugincards">
+            </div>
+            <div class="f-2">
+                <h5 id="infover"></h5><h5></h5>
+            </div>
+            <div class="f-2">
+                <h5 id="infodesc"></h5>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

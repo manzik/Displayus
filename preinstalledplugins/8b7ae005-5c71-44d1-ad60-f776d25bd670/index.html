@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="CapsLock.compressed.js"></script>
+    <script>
+        var screen = require('electron').screen, display = screen.getPrimaryDisplay(),fs=require("fs");
+        require('electron').screen.on("display-metrics-changed", function ()
+        {
+            console.log("change");
+            display = require('electron').screen.getPrimaryDisplay();
+            document.getElementById("webview").style.width = display.workAreaSize.width + "px";
+            document.getElementById("webview").style.height = display.workAreaSize.height + "px";
+        });
+        var currentitem;
+        function setwvonload()
+        {
+            console.log(2);
+            var webview = document.getElementById("webview");
+            wvc = webview.getWebContents();
+            wvc.on("did-finish-load", function ()
+            {
+                var width = display.workAreaSize.width;
+                var height = display.workAreaSize.height;
+                var minwh = Math.min(width, height);
+                wvc.capturePage({ x: (width - minwh) / 2, width: minwh, y: (height - minwh) / 2, height: minwh }, (img) =>
+                {
+                    var path = __dirname + "\\tmp\\" + (Math.random() * Math.pow(10, 17)) + ".png";
+                    fs.writeFile(path, img.toPNG(), function (err)
+                    {
+                        if (!err)
+                        {
+                            if (currentitem.icon)
+                                fs.unlink(currentitem.icon, () =>
+                                {
+                                    currentitem.icon = path;
+                                    displayus.editItem(currentitem);
+                                });
+                            else
+                            {
+                                currentitem.icon = path;
+                                displayus.editItem(currentitem);
+                            }
+                        }
+                        else
+                            cb();
+                    });
+
+                });
+            });
+        }
+        window.addEventListener("load", function ()
+        {
+            
+            displayus.init();
+            displayus.addEventListener("itemchange", function (arg)
+            {
+                currentitem = arg.item;
+                if (arg.item.data.url)
+                {
+                    document.getElementById("maincont").style.display = "block";
+                    document.getElementById("enterurlcont").style.display = "none";
+                    document.getElementById("webview").src = arg.item.data.url;
+                    setTimeout(() => { setwvonload(); }, 0);
+                }
+                else
+                {
+                    document.getElementById("maincont").style.display = "none";
+                    document.getElementById("enterurlcont").style.display = "block";
+                }
+            });
+            displayus.getItem(function (item)
+            {
+                currentitem = item;
+                document.getElementById("webview").style.width = display.workAreaSize.width + "px";
+                document.getElementById("webview").style.height = display.workAreaSize.height + "px";
+                if (item)
+                {
+                    document.getElementById("webview").src = item.data.url;
+                    setTimeout(() => { setwvonload(); }, 0);
+                }
+                else
+                {
+                    document.getElementById("maincont").style.display = "none";
+                    document.getElementById("enterurlcont").style.display = "block";
+                }
+                var shift = false;
+                var windowonbackground = true;
+                function ctrld()
+                {
+                    windowonbackground = !windowonbackground;
+                    if (windowonbackground)
+                        displayus.setAsBackground();
+                    else
+                    {
+                        require('electron').remote.getCurrentWindow().focus();
+                        displayus.removeFromBackground();
+                    }
+                }
+                var globalShortcut = require('electron').remote.globalShortcut;
+                const ret = globalShortcut.register('CommandOrControl+D', ctrld);
+                window.onbeforeunload = function (e) { globalShortcut.unregisterAll(); }
+                displayus.connectInputs(["mouse", "keyboard"]);
+            });
+        });
+        function render()
+        {
+            document.getElementById("button").style.left = parseFloat(document.getElementById("button").style.left || 1) + 1 + "px";
+
+        }
+    </script>
+</head>
+<body>
+    <div id="maincont">
+        <webview src="" id="webview" style="position:fixed;top:0;left:0;" draggable="false"></webview>
+        <p id="p" style="position:fixed;top:0;left:0;z-index:2;"></p>
+    </div>
+    <div id="enterurlcont" style="position:fixed;left:0;top:0;width:100%;height:100%;text-align:center;">
+        <div style="top:50%;position:fixed;">Please enter a url</div>
+    </div>
+    <!--<button id="button" style="position:fixed;"></button>-->
+</body>
+</html>

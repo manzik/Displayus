@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body
+        {
+            background-color:rgba(255,255,255,0.3) !important;
+        }
+        button
+        {
+        }
+    </style>
+    <link href="css/flat-ui.min.css" rel="stylesheet" />
+</head>
+<body>
+    <div style="width:100%;text-align:center;position:fixed;top:25px;">
+        <button class="btn btn-block btn-lg btn-primary" onclick="displayus.done({ id: 'bingimageitem' + (Math.random() * Math.pow(10, 17)), label: 'Bing Image of Day', data: {} })" id="clickbutton">Add</button>
+        <button class="btn btn-block btn-lg btn-danger" onclick="displayus.cancel()">Cancel</button>
+    </div>
+</body>
+</html>

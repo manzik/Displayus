@@ -1,0 +1,2527 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Displayus</title>
+    <link href="css/material/material.min.css" rel="stylesheet" />
+    <link href="css/jquery-confirm.min.css" rel="stylesheet" />
+    <link href="css/main.css" rel="stylesheet" />
+    <script src="js/StackBlur.js"></script>
+    <script>
+        jQuery = $ = require("./js/jquery-3.1.1.min.js");
+    </script>
+    <script src="js/tether.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+    <script src="js/material.min.js"></script>
+    <link href="css/waves.min.css" rel="stylesheet">
+    <link href="css/jquery-ui.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <script src="js/jquery-ui.min.js"></script>
+    <script src="js/waves.min.js"></script>
+    <script src="js/jquery-confirm.min.js"></script>
+    <style>
+        div.developerspan {
+            font-size: 8;
+            opacity: 0.8;
+            color: rgba(0, 0, 0, 1);
+            text-shadow: 0px 0px 5px rgba(255,255,255,1);
+            bottom: 0;
+            position: absolute;
+            margin-left: 15px;
+            margin-bottom: 8px;
+        }
+
+        #jobprogressbar {
+            box-shadow: 0px 0px 10px rgba(0,0,0,0.17) inset;
+            width: 75%;
+            left: 7.5px;
+            position: relative;
+            height: 15px;
+            top: 6px;
+            background-color: rgb(224, 254, 255);
+        }
+
+        #jobprogressinnerbar {
+            transition: all 0.3s;
+            background-color: rgb(0, 193, 255);
+            border: none !important;
+        }
+    </style>
+    <script>
+
+        var electron = require('electron'), currentwindow = require('electron').remote.getCurrentWindow(), remote = require('electron').remote, dialog = remote.dialog, BrowserWindow = remote.BrowserWindow
+            , fs = require("fs"), path = require("path"), ipcRenderer = electron.ipcRenderer, http = require("http"), url = require('url'), request = require("request"), app = remote.app, displayussite = "127.0.0.1", rimraf = require('rimraf'), appversion = app.getVersion(), screen = electron.screen, mainscreen = screen.getPrimaryDisplay();
+        var defaultsettingsjson = '{"changeinterval":900000,"exitopt":"ask","autoupdateplugins":"auto","autoupdateapp":0}';
+        var startup = require('auto-launch'), appexepath = app.getPath("exe"), appstartup = new startup({
+            isHidden: true,
+            name: 'Displayus',
+            path: appexepath,
+        }), menu = remote.Menu, menuitem = remote.MenuItem;
+
+
+        window.onerror = function (message, url, lineNumber)
+        {
+            console.error(message, url, lineNumber);
+            return true;
+        }
+        var autoupdateinterval, autoupdatesett, askedupdate = false, askedinstallupdate = false;
+        function autoupdaterev(type, args)
+        {
+            switch (type)
+            {
+                case "update-available":
+                    if (autoupdatesett == "auto")
+                    {
+                        ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "downloadupdate", data: {} }));
+                    }
+                    else
+                        if (autoupdatesett == "ask")
+                        {
+                            if (askedupdate)
+                                return;
+                            else
+                                askedupdate = true;
+
+                            var ind = dialog.showMessageBox(
+                                currentwindow,
+                                {
+                                    type: "question",
+                                    buttons: ["Yes", "No"],
+                                    title: "Displayus Updater",
+                                    message: "Update for Displayus is available, do you want to start installing it?"
+                                });
+                            if (ind === 0)
+                            {
+                                ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "downloadupdate", data: {} }));
+                            }
+                        }
+                    break;
+                case "update-downloaded":
+                    if (askedinstallupdate)
+                        return;
+                    else
+                        askedinstallupdate = true;
+
+                    askupdateinstall((doit) => { if (doit) ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "quitandinstallupdate", data: {} })); });
+                    break;
+            }
+        }
+        function startautoupdatecheck()
+        {
+            autoupdateinterval = setInterval((() =>
+            {
+                if (autoupdatesett !== "never")
+                    ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "checkforupdates", data: {} }));
+                return this;
+            })(), 1000 * 60 * 15);
+        }
+        function askupdateinstall(cb)
+        {
+            var ind = dialog.showMessageBox(
+                currentwindow,
+                {
+                    type: "question",
+                    buttons: ["Yes", "No"],
+                    title: "Displayus Updater",
+                    message: "Update is downloaded, do you want to restart app to install it?"
+                });
+            cb(ind === 0);
+        }
+
+        var arr_currentjobs = [];
+
+        function setcurrentjobtext(text)
+        {
+            document.getElementById("currentjobtext").innerHTML = text;
+        }
+        function setcurrrentjobpercent(percent)
+        {
+            if (percent < 0)
+            {
+                document.getElementById("jobprogressinnerbar").style.width = 100 + "%";
+                document.getElementById("jobprogressinnerbar").className = "progress-bar progress-bar-striped active";
+            }
+            else
+            {
+                document.getElementById("jobprogressinnerbar").style.width = percent + "%";
+                document.getElementById("jobprogressinnerbar").className = "progress-bar progress-bar-striped";
+            }
+        }
+        function showcurrentjobbar()
+        {
+            var currentjobbar = document.getElementById("currentjobbar");
+            currentjobbar.style.top = "calc(100% - 30px)";
+            document.getElementById("pluginscontainer").style.height = "calc(100% - 130px)";
+            document.getElementById("itemscontainer").style.height = "calc(100% - 130px)";
+            document.getElementById("allitemsparentcontainer").style.height = "calc(100% - 130px)";
+        }
+        function hidecurrentjobbar()
+        {
+            var currentjobbar = document.getElementById("currentjobbar");
+            currentjobbar.style.top = "calc(100%)";
+            document.getElementById("pluginscontainer").style.height = "calc(100% - 100px)";
+            document.getElementById("itemscontainer").style.height = "calc(100% - 100px)";
+            document.getElementById("allitemsparentcontainer").style.height = "calc(100% - 100px)";
+        }
+        function sethtmljobbar()
+        {
+            var firstjob = arr_currentjobs[0];
+            if (!firstjob)
+                return;
+            firstjob.percent && setcurrrentjobpercent(firstjob.percent);
+            firstjob.desc !== undefined && setcurrentjobtext(firstjob.desc);
+        }
+        function createjob(id, desc, percent)
+        {
+            var job = {};
+            job.id = id || Math.random() * Math.pow(10, 17);
+            job.desc = desc || "";
+            job.percent = percent || -1;
+            return job;
+        }
+        function setincurrentjobs(job)
+        {
+            var countprevjobs = arr_currentjobs.length;
+            var alreadyavailable = false;
+            arr_currentjobs.forEach(function (jobinarr, i)
+            {
+                if (jobinarr.id == job.id)
+                {
+                    alreadyavailable = true;
+                    if (job.delete)
+                        arr_currentjobs.splice(i, 1);
+                    else
+                        arr_currentjobs[i] = job;
+                    return;
+                }
+            });
+            if (!alreadyavailable)
+                arr_currentjobs.push(job);
+            var countcurrentjobs = arr_currentjobs.length;
+            if (Math.sign(countprevjobs) !== Math.sign(countcurrentjobs))
+            {
+                if (countcurrentjobs)
+                    showcurrentjobbar();
+                else
+                    hidecurrentjobbar();
+            }
+            sethtmljobbar();
+        }
+
+        let eventem = require("events");
+        class plugincontroller extends eventem
+        {
+            constructor(pluginname)
+            {
+                super();
+                this.name = pluginname;
+            }
+        }
+        var dialog = remote.dialog;
+        var ncp = require('ncp').ncp;
+        var dezip = require('decompress-zip');
+
+        var userdata = app.getPath("userData");
+        if (!fs.existsSync(userdata + "\\tmp"))
+            fs.mkdirSync(userdata + "\\tmp");
+        if (!fs.existsSync(path.join(userdata, "database.json")))
+        {
+            fs.writeFileSync(path.join(userdata, "database.json"), defaultsettingsjson);
+        }
+        function addpluginfromfile(file, deletewhendone, job)
+        {
+            var tmppath = userdata + "\\tmp\\" + file.substring(file.lastIndexOf("\\") + 1, file.length).split(".")[0];
+            var dezipper = new dezip(file);
+            dezipper.on('extract', function (log)
+            {
+                var arr_addedplugins = getDirectories(tmppath);
+                arr_addedplugins.forEach(function (plugin)
+                {
+                    var json = JSON.parse(fs.readFileSync(tmppath + "\\" + plugin + "\\" + "package.json"));
+                    if (json.keep)
+                        json.keep.forEach(function (keeppath)
+                        {
+                            rimraf.sync(tmppath + "\\" + plugin + "\\" + keeppath);
+                        });
+                });
+                if (job)
+                {
+                    job.percent = -1;
+                    setincurrentjobs(job);
+                }
+                ncp(tmppath, userdata + "\\plugins", function (err)
+                {
+                    if (err)
+                    {
+                        alert("Error while unpacking plugin file.\nError information:\n" + err);
+                        return;
+                    }
+                    for (var i = 0, dirs = getDirectories(path.join(userdata, "plugins")); i < dirs.length; i++)
+                    {
+                        var plugin = dirs[i];
+
+
+                        var sett, data;
+                        try
+                        {
+                            sett = require(userdata + "/plugins/" + plugin + "/package.json")
+
+                        } catch (e) { console.error(e); }
+                        try
+                        {
+                            data = require(userdata + "/plugins/" + plugin + "/data.json")
+                        } catch (e)
+                        {
+                            data = { chance: 50, items: [] };
+                            fs.writeFileSync(userdata + "/plugins/" + plugin + "/data.json", JSON.stringify(data));
+                        }
+                        plugin = sett.guid || plugin;
+                        ((plugin, sett, data) =>
+                        {
+                            if (plugins.data[plugin] !== undefined)
+                            {
+                                if (arr_addedplugins.indexOf(plugin) > -1)
+                                {
+                                    plugin = sett.guid || plugin;
+                                    plugins.list.forEach(function (pluginname, j) { if (pluginname == plugin) { plugins.list[j] = plugin; return; } });
+
+                                    var mainjspath = userdata + "\\" + "plugins\\" + plugin + "\\" + (sett.main || "main.js");
+                                    plugins.data[plugin] = { settings: sett, data: data || {} };
+                                    if (fs.existsSync(mainjspath))
+                                    {
+                                        try
+                                        {
+                                            plugins.data[plugin].main = require(mainjspath);
+
+                                        } catch (e) { console.error(e); }
+                                    }
+
+                                    if (deletewhendone)
+                                        fs.unlink(file, () => { });
+                                }
+                            }
+                            else
+                            {
+                                plugins.list.push(plugin);
+
+                                var mainjspath = userdata + "\\" + "plugins\\" + plugin + "\\" + (sett.main || "main.js");
+                                plugins.data[plugin] = { settings: sett, data: data || {} };
+                                if (fs.existsSync(mainjspath))
+                                {
+                                    try
+                                    {
+                                        plugins.data[plugin].main = require(mainjspath);
+                                        plugins.data[plugin].controller = new plugincontroller(plugin);
+                                        setTimeout(function ()
+                                        {
+                                            plugins.data[plugin].main(plugins.data[plugin].controller);
+                                        }, 0);
+                                    } catch (e) { console.error(e); }
+                                }
+
+                                addplugin(plugin, function ()
+                                {
+                                    calcpercents(currentpage == "additemfromplugins" ? true : false);
+                                    if (deletewhendone)
+                                        fs.unlink(file);
+                                    console.log(plugin, plugins.data[plugin]);
+                                    pluginclick(plugin, () => { }, true);
+                                });
+
+                            }
+                        })(plugin, sett, data);
+                    }
+
+                    rimraf(tmppath, function () { });
+                    if (job)
+                    {
+                        job.delete = true;
+                        setincurrentjobs(job);
+                    }
+                });
+            });
+            dezipper.on('progress', function (fileIndex, fileCount)
+            {
+                if (job)
+                {
+                    job.percent = (fileIndex + 1) / fileCount * 100;
+                    setincurrentjobs(job);
+                }
+            });
+            dezipper.on("error", function (e)
+            {
+                alert("Error while unpacking plugin file.\nError information:\n" + e);
+            });
+
+            if (!fs.existsSync(tmppath))
+                fs.mkdirSync(tmppath);
+            dezipper.extract({
+                path: tmppath
+            });
+        }
+        if (!fs.existsSync(userdata + "\\plugins"))
+        {
+            fs.mkdirSync(userdata + "\\plugins");
+            addpluginfromfile(__dirname + "\\preinstalledplugins.dus");
+        }
+        //http://stackoverflow.com/questions/18112204/get-all-directories-within-directory-nodejs
+        function getDirectories(srcpath)
+        {
+            return fs.readdirSync(srcpath)
+                .filter(file => fs.statSync(path.join(srcpath, file)).isDirectory())
+        }
+        function finditem(item, plugin)
+        {
+            if (plugin)
+            {
+                return finditemfromplugin(item, plugin);
+            }
+            else
+            {
+                for (var i = 0; i < plugins.list.length; i++)
+                {
+                    var item = finditemfromplugin(item, plugins.list[i]);
+                    if (item)
+                        return item;
+                }
+                return undefined;
+            }
+        }
+        function manageplugins()
+        {
+            if (changingpage)
+                return;
+
+            if (currentpage == "items")
+            {
+                topbarbuttons.right.splice(topbarbuttons.right.indexOf("managepluginsbutton"), 1);
+                topbarbuttons.left.unshift("backbutton");
+
+            }
+            /*
+            else
+                if (currentpage == "additemfromplugins")
+                {
+                    topbarbuttons.right.splice(topbarbuttons.right.indexOf("managepluginsbutton"), 1);
+                }
+            */
+            topbarbuttons.set();
+            currentpage = "manageplugins";
+            changingpage = true;
+
+            addingplugincounter = 0;
+            document.getElementById("plugincards").innerHTML = "";
+            for (var i = 0, dirs = getDirectories(path.join(userdata, "plugins")); i < dirs.length; i++)
+            {
+                plugin = dirs[i];
+
+                var sett, data;
+                try
+                {
+                    sett = require(userdata + "\\" + "plugins\\" + plugin + "\\package.json")
+
+                } catch (e) { console.error(e); }
+                try
+                {
+                    data = require(userdata + "\\" + "plugins\\" + plugin + "\\data.json")
+                } catch (e)
+                {
+                    data = { chance: 50, items: [] };
+                    fs.writeFileSync(userdata + "/plugins/" + plugin + "/data.json", JSON.stringify(data));
+                }
+
+
+                plugin = sett.guid || plugin;
+
+                addingplugincounter++;
+
+                addplugin(plugin, function ()
+                {
+                });
+
+            }
+
+            document.getElementById("pluginscontainer").style.display = "block";
+            setTimeout(() =>
+            {
+                document.getElementById("pluginscontainer").style.opacity = "1";
+                document.getElementById("pluginscontainer").style.zIndex = "1";
+                document.getElementById("itemscontainer").style.zIndex = "-1";
+
+
+                document.getElementById("itemscontainer").style.opacity = "0";
+            }, 0);
+
+            setTimeout(() =>
+            {
+                document.getElementById("itemscontainer").style.display = "none";
+                changingpage = false;
+            }, 250);
+        }
+        var topbarbuttons = { left: [/*"activate"*/], right: ["additembutton", "globalsettingsbutton", "managepluginsbutton"], prev: { left: [], right: [] } };
+        function settopbarbuttons()
+        {
+            var barwidth = parseInt(window.getComputedStyle(document.getElementById("topbuttons"), null).getPropertyValue("width"));
+            var usedbuttons = [];
+            function setside(side)
+            {
+                var tillnowwidth = 0;
+
+                topbarbuttons[side].forEach((button, i) =>
+                {
+                    var el = obj_topbuttons[button].el;
+
+                    el.style.display = "block";
+                    var elemwidth = parseInt(window.getComputedStyle(el, null).getPropertyValue("width"));
+                    setTimeout(() =>
+                    {
+                        el.style.opacity = "1";
+                    });
+                    el.style["left"] = (side == "left" ? tillnowwidth + "px" : "calc(100% - " + (tillnowwidth + elemwidth) + "px)");
+
+                    el.style.float = "left";
+                    tillnowwidth += elemwidth;
+                    usedbuttons.push(button);
+                });
+
+            }
+            function delprevs(side)
+            {
+                topbarbuttons.prev[side].forEach((button, i) =>
+                {
+                    if (usedbuttons.indexOf(button) < 0)
+                    {
+                        var el = obj_topbuttons[button].el;
+                        el.style.opacity = "0";
+                        setTimeout(() =>
+                        {
+                            el.style.display = "none";
+                        }, 500);
+                    }
+                });
+                topbarbuttons.prev[side] = JSON.parse(JSON.stringify(topbarbuttons[side]));
+            }
+            setside("left");
+            setside("right");
+            delprevs("left");
+            delprevs("right");
+        }
+        topbarbuttons.set = settopbarbuttons;
+
+        function inittopbarmenu()
+        {
+            var topbuttons = document.getElementById("topbuttons");
+            Array.from(topbuttons.children).forEach((child) =>
+            {
+                child.style.opacity = "0";
+                var id = child.getAttribute("id");
+                obj_topbuttons[id] = { el: child };
+            });
+
+            settopbarbuttons();
+        }
+
+        function finditemfromplugin(item, plugin)
+        {
+            var itemresult;
+            for (var i = 0, items = plugins.data[plugin].data.items, len = items.length; i < len; i++)
+            {
+                if (items[i].id == item)
+                {
+                    return items[i];
+                }
+            }
+            return itemresult;
+        }
+        var defaultwindowdime = { x: 0, y: 0, w: 0, h: 0 };
+        function resetsidepreview(cb)
+        {
+            insidepreview = false;
+            var position = currentwindow.getPosition();
+            var position = { x: position[0], y: position[1], w: currentwindow.getSize()[0], h: currentwindow.getSize()[1] };
+            var start = Date.now();
+            $(position).animate({ h: defaultwindowdime.h }, {
+                duration: 500,
+                queue: false,
+                done: function ()
+                {
+                    settocornerdone = true;
+                },
+                easing: "easeOutQuad"
+            });
+            $(position).animate({}, {
+                queue: false,
+                duration: 500
+            });
+            var settocornerdone = false;
+
+            /*
+            var targetx = mainscreen.size.width - 300;
+            var startx = defaultwindowdime.x;
+            var diffx = targetx - startx;
+
+            var targety = 0;
+            var starty = defaultwindowdime.y;
+            var diffy = Math.abs(targety - starty);*/
+            function settocorner()
+            {
+                var donepercent = (Date.now() - start) / 300;
+                /*
+                position.x = Math.round(1 - Math.cos(((donepercent + 1) * Math.PI) * 0.5) * diffx) + startx;
+                position.y = starty - Math.round((Math.sin(((1 - donepercent)+1) * Math.PI / 2)) * diffy);
+                */
+                try
+                {
+                    currentwindow.setPosition(Math.round(position.x), Math.round(position.y));
+                    currentwindow.setSize(Math.round(position.w), Math.round(position.h));
+                }
+                catch (e) { }
+                if (!settocornerdone)
+                    requestAnimationFrame(settocorner);
+                else
+                {
+                    $(position).animate({ x: defaultwindowdime.x, w: defaultwindowdime.w, y: defaultwindowdime.y }, {
+                        duration: 500,
+                        done: function ()
+                        {
+                            fillheightdone = true;
+                        },
+                        easing: "easeOutQuad"
+                    });
+                    var fillheightdone = false;
+                    function fillheight()
+                    {
+                        try
+                        {
+                            currentwindow.setSize(Math.round(position.w), Math.round(position.h));
+                            currentwindow.setPosition(Math.round(position.x), Math.round(position.y));
+                        }
+                        catch (e) { }
+                        if (!fillheightdone)
+                            requestAnimationFrame(fillheight);
+                        else
+                            cb && cb();
+                        insidepreview = false;
+                    }
+                    requestAnimationFrame(fillheight);
+
+
+                }
+            }
+            requestAnimationFrame(settocorner);
+        }
+
+        var lastsizechange = Date.now();
+        var sideprev = { y: -10 };
+        function onresize()
+        {
+
+            if (insidepreview)
+            {
+                newposition = currentwindow.getPosition();
+                var newposition = { x: newposition[0], y: newposition[1], w: currentwindow.getSize()[0], h: currentwindow.getSize()[1] };
+                if (newposition.x === globalposition.x)
+                {
+                    try
+                    {
+                        currentwindow.setPosition(Math.round(globalposition.x), Math.round(globalposition.y));
+                        currentwindow.setSize(Math.round(globalposition.w), Math.round(globalposition.h));
+                    }
+                    catch (e) { }
+                }
+                else
+                {
+                    globalposition = currentwindow.getPosition();
+
+                    globalposition = { x: globalposition[0], y: globalposition[1], w: currentwindow.getSize()[0], h: currentwindow.getSize()[1] };
+                }
+                /*
+                if (Date.now() - lastsizechange < 50)
+                {
+                    setTimeout(() =>
+                    {
+                        if (Date.now() - lastsizechange > 50)
+                        {
+                            onresize();
+                        }
+                    }, 100);
+                    return;
+                }
+                newposition = currentwindow.getPosition();
+                var newposition = { x: newposition[0], y: newposition[1], w: currentwindow.getSize()[0], h: currentwindow.getSize()[1] };
+
+                globalposition.x = mousepos.x;
+                globalposition.w = mainscreen.size.width - mousepos.x;
+                currentwindow.setPosition(Math.round(globalposition.x), Math.round(globalposition.y));
+                currentwindow.setSize(Math.round(globalposition.w), Math.round(globalposition.h));
+                lastsizechange = Date.now();
+                */
+                return;
+                if (newposition.h !== globalposition.h || newposition.y !== globalposition.y || (newposition.x + newposition.width) !== (globalposition.x + globalposition.width))
+                {
+                    currentwindow.setPosition(Math.round(globalposition.x), Math.round(globalposition.y));
+                    currentwindow.setSize(Math.round(globalposition.w), Math.round(globalposition.h));
+                }
+                else
+                {
+                    globalposition = currentwindow.getPosition();
+
+                    globalposition = { x: globalposition[0], y: globalposition[1], w: currentwindow.getSize()[0], h: currentwindow.getSize()[1] };
+                }
+            }
+
+        }
+
+        function globalmouseevent(button, type)
+        {
+        }
+
+        var resizingpreview = false;
+
+        var insidepreview = false;
+        var globalposition = {};
+        function settosidepreview(cb)
+        {
+            //currentwindow.setResizable(false);
+
+            globalposition = currentwindow.getPosition();
+
+            globalposition = { x: globalposition[0], y: globalposition[1], w: currentwindow.getSize()[0], h: currentwindow.getSize()[1] };
+            var position = globalposition;
+            defaultwindowdime = JSON.parse(JSON.stringify(position));
+            var start = Date.now();
+            $(position).animate({ y: -5 }, {
+                duration: 500,
+                queue: false,
+                done: function ()
+                {
+                    settocornerdone = true;
+                },
+                easing: "easeOutQuad"
+            });
+            $(position).animate({ x: mainscreen.size.width - 300, w: 300 + 10 }, {
+                queue: false,
+                duration: 500
+            });
+            var settocornerdone = false;
+
+            /*
+            var targetx = mainscreen.size.width - 300;
+            var startx = defaultwindowdime.x;
+            var diffx = targetx - startx;
+
+            var targety = 0;
+            var starty = defaultwindowdime.y;
+            var diffy = Math.abs(targety - starty);*/
+            function settocorner()
+            {
+                var donepercent = (Date.now() - start) / 300;
+                /*
+                position.x = Math.round(1 - Math.cos(((donepercent + 1) * Math.PI) * 0.5) * diffx) + startx;
+                position.y = starty - Math.round((Math.sin(((1 - donepercent)+1) * Math.PI / 2)) * diffy);
+                */
+                try
+                {
+                    currentwindow.setPosition(Math.round(position.x), Math.round(position.y));
+                    currentwindow.setSize(Math.round(position.w), Math.round(position.h));
+                } catch (e) { }
+                if (!settocornerdone)
+                    requestAnimationFrame(settocorner);
+                else
+                {
+                    $(position).animate({ h: mainscreen.workAreaSize.height + 10 }, {
+                        duration: 300,
+                        done: function ()
+                        {
+                            fillheightdone = true;
+                        }
+                    });
+                    var fillheightdone = false;
+                    function fillheight()
+                    {
+                        try
+                        {
+                            currentwindow.setSize(Math.round(position.w), Math.round(position.h));
+                        } catch (e) { }
+                        if (!fillheightdone)
+                            requestAnimationFrame(fillheight);
+                        else
+                        {
+                            setTimeout(() =>
+                            {
+                                globalposition = currentwindow.getPosition();
+
+                                globalposition = { x: globalposition[0], y: globalposition[1], w: currentwindow.getSize()[0], h: currentwindow.getSize()[1] };
+
+                                insidepreview = true;
+                            }, 1000);
+
+                            cb && cb();
+                        }
+
+
+                    }
+                    requestAnimationFrame(fillheight);
+
+
+                }
+            }
+            requestAnimationFrame(settocorner);
+        }
+        var currentpage = "items";
+        function additem()
+        {
+            if (changingpage)
+                return;
+            if (currentpage == "manageplugins")
+            {
+                addpluginclick();
+            }
+            else
+                if (currentpage == "items")
+                {
+                    currentpage = "additemfromplugins";
+                    changingpage = true;
+
+                    addingplugincounter = 0;
+                    document.getElementById("plugincards").innerHTML = "";
+                    for (var i = 0, dirs = getDirectories(path.join(userdata, "plugins")); i < dirs.length; i++)
+                    {
+                        plugin = dirs[i];
+
+                        var sett, data;
+                        try
+                        {
+                            sett = require(userdata + "\\" + "plugins\\" + plugin + "\\package.json")
+
+                        } catch (e) { console.error(e); }
+                        try
+                        {
+                            data = require(userdata + "\\" + "plugins\\" + plugin + "\\data.json")
+                        } catch (e)
+                        {
+
+                            data = { chance: 50, items: [] };
+                            fs.writeFileSync(userdata + "/plugins/" + plugin + "/data.json", JSON.stringify(data));
+                        }
+
+
+                        plugin = sett.guid || plugin;
+
+                        if (!(sett && sett.buttons && sett.buttons && sett.buttons.items && sett.buttons.items.add !== undefined && !sett.buttons.items.add))
+                        {
+                            if (!(sett.singleitem && plugins.data[plugin].data.items.length > 0))
+                            {
+                                addingplugincounter++;
+                                addplugin(plugin, function ()
+                                {
+                                });
+                            }
+                        }
+
+                    }
+                    topbarbuttons.left.unshift("backbutton");
+                    topbarbuttons.right.splice(topbarbuttons.right.indexOf("additembutton"), 1);
+                    topbarbuttons.right.splice(topbarbuttons.right.indexOf("manageplugins"), 1);
+                    topbarbuttons.set();
+                    document.getElementById("pluginscontainer").style.display = "block";
+                    setTimeout(() =>
+                    {
+                        document.getElementById("pluginscontainer").style.opacity = "1";
+                        document.getElementById("pluginscontainer").style.zIndex = "1";
+                        document.getElementById("itemscontainer").style.zIndex = "-1";
+
+
+                        document.getElementById("itemscontainer").style.opacity = "0";
+                    }, 0);
+
+                    setTimeout(() =>
+                    {
+                        document.getElementById("itemscontainer").style.display = "none";
+                        changingpage = false;
+                    }, 500);
+                }
+        }
+        function closepreviewsettings(cb)
+        {
+            ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "removepreviewfrombackground", data: {} }));
+            resetsidepreview(() => { cb && cb(); });
+
+            currentshowing.item = currentshowing.prev.item;
+            currentshowing.plugin = currentshowing.prev.plugin;
+
+            setTimeout(function ()
+            {
+                document.getElementById("maincont").style.display = "block";
+                document.getElementById("prevcont").style.opacity = 0;
+                document.getElementById("maincont").style.opacity = 1;
+                setTimeout(() =>
+                {
+                    document.getElementById("prevcont").style.display = "none";
+                }, 500);
+
+            }, 500);
+        }
+        var currentpreviewplugin;
+        var currentshowing = { preview: false, item: 0, plugin: 0, prev: { item: 0, plugin: 0 } };
+        function editbutton(name, isitem, plugin)
+        {
+            var item = finditem(name, plugin);
+            ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "newwall", data: { previewtype: "edit", plugin: plugin, item: item, path: userdata + "\\plugins\\" + plugin + "\\" + (plugins.data[plugin].settings.wallpaper || (plugins.data[plugin].settings.apptype ? apptypeextentions[plugins.data[plugin].settings.apptype] : "index.html")), apptype: (plugins.data[plugin].settings.apptype ? plugins.data[plugin].settings.apptype : "js"), preview: true/*, bw: { width: mainscreen.workAreaSize.width - 300, kiosk: false, height: mainscreen.workAreaSize.height, x: 0, y: 0} */ } }))
+            currentshowing.prev.item = currentshowing.item;
+            currentshowing.prev.plugin = currentshowing.plugin;
+
+            currentshowing.plugin = plugin;
+            currentshowing.item = name;
+
+            settosidepreview(function ()
+            {
+
+            });
+
+            currentplugin = plugin;
+
+            var settingswebview = document.getElementById("wallpapersettings");
+            if (settingswebview)
+            {
+                settingswebview.remove();
+                settingswebview = null;
+            }
+
+            document.getElementById("prevcont").innerHTML += ' <webview id="wallpapersettings" nodeintegration style="height:100%;width:100%;"></webview>';
+            settingswebview = document.getElementById("wallpapersettings");
+
+            settingswebview.setAttribute("preload", __dirname + "/displayus.js");
+            settingswebview.src = path.join(userdata, "plugins/" + currentplugin + "/" + (plugins.data[currentplugin].settings.modify || "modify.html"));
+            settingswebview.addEventListener("did-finish-load", () =>
+            {
+                var swvwebcontents = settingswebview.getWebContents();
+                swvwebcontents.executeJavaScript("displayus.plugin='" + plugin + "';displayus.type='" + ("edit") + "';displayus.getItem=function(cb){cb(" + JSON.stringify(item) + ")};displayus._loaded();");
+            });
+            settingswebview.addEventListener('ipc-message', (event) =>
+            {
+                var msg = JSON.parse(event.channel);
+                switch (msg.type)
+                {
+                    case "item-change":
+                        pluginitem = msg.data.item;
+                        ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "previewitemchange", data: { item: pluginitem } }));
+                        break;
+                    case "modify-status":
+                        var type = msg.data.type;
+                        if (type == "save")
+                        {
+                            pluginitem = msg.data.item || pluginitem;
+                            console.log({ type: "edititem", data: { icon: pluginitem.icon || "", label: pluginitem.label || "", description: pluginitem.description || "", plugin: plugin, id: pluginitem.id, data: pluginitem.data } });
+                            ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "edititem", data: { icon: pluginitem.icon || "", label: pluginitem.label || "", description: pluginitem.description || "", plugin: plugin, id: pluginitem.id, data: pluginitem.data } }));
+                        }
+                        closepreviewsettings();
+                        break;
+                }
+            });
+            var pluginitem;
+
+            document.getElementById("maincont").style.opacity = 0;
+            document.getElementById("prevcont").style.opacity = 1;
+            document.getElementById("prevcont").style.display = "block";
+            setTimeout(function ()
+            {
+                document.getElementById("maincont").style.display = "none";
+            }, 500);
+            /*
+            if (isitem)
+            {
+                currentplugin = plugin;
+                var win = new BrowserWindow({ modal: true, width: 800, height: 600, parent: currentwindow, webPreferences: { preload: __dirname + "/displayus.js" } });
+
+                var item = finditem(name, currentplugin);
+                win.webContents.executeJavaScript("displayus.plugin='" + currentplugin + "';displayus.type='" + ("edit") + "';displayus.getItem=function(cb){cb(" + JSON.stringify(item) + ")};displayus._loaded();");
+                win.loadURL(url.format({ pathname: path.join(userdata, "plugins/" + currentplugin + "/" + (plugins.data[currentplugin].settings.modify || "modify.html")), protocol: 'file:', slashes: true }))
+
+
+            }
+            */
+        }
+        function deletebutton(name, isitem, plugin)
+        {
+            if (isitem)
+            {
+                var plugind = plugins.data[plugin];
+
+                for (var i = 0, items = plugind.data.items, len = items.length; i < len; i++)
+                {
+                    if (items[i].id == name)
+                    {
+                        var item = items.splice(i, 1);
+
+                        (function (plugin)
+                        {
+                            var saveplugin = function ()
+                            {
+                                saveplugindata(plugin);
+                                var itemdom = document.getElementById("item-" + name);
+                                itemdom.style.opacity = "0";
+                                setTimeout(function ()
+                                {
+                                    itemdom.outerHTML = "";
+                                    delete itemdom;
+                                    setpositions("itemcards");
+                                }, 300);
+                                if (plugind.main)
+                                {
+                                    if (plugind.controller)
+                                        plugind.controller.emit("itemdelete", item[0]);
+                                }
+                            };
+                            if (savingdata == 0)
+                            {
+
+                                saveplugin();
+
+                            }
+                            else
+                                adddatasavingdoneevent(function () { saveplugin(); });
+                        })(plugin)
+
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                confirmmessage("Are you sure you want to delete plugin " + plugins.data[name].settings.title + "?", function (confirmed)
+                {
+                    if (confirmed)
+                    {
+                        if (plugin == name)
+                        {
+                            plugins.data[name] = undefined;
+                            for (var i = 0; i < plugins.list.length; i++)
+                                if (plugins.list[i] == name)
+                                {
+                                    plugins.list.splice(i, 1);
+                                    break;
+                                }
+                            changewall();
+                        }
+                        var itemdom = document.getElementById("plugin-" + name);
+                        itemdom.style.opacity = "0";
+                        setTimeout(function ()
+                        {
+                            itemdom.outerHTML = "";
+                            delete itemdom;
+                            setpositions("plugincards");
+                            deleteplugin(name);
+                        }, 300);
+
+                    }
+                })
+            }
+        }
+        function deleteplugin(name)
+        {
+
+            rimraf(path.join(userdata, "plugins/" + name), () => { });
+            plugins.data[name] = undefined;
+            for (var i = 0; i < plugins.list.length; i++)
+            {
+                if (plugins.list[i] == "name")
+                {
+                    plugins.list.splice(i, 1);
+                    break;
+                }
+            }
+        }
+
+
+        function confirmmessage(msg, cb)
+        {
+            var jc = $.confirm({
+                type: "red",
+                boxWidth: "700px",
+                title: 'Delete Plugin',
+                content: msg,
+                buttons: {
+                    confirm: {
+                        text: "Delete",
+                        btnClass: 'btn-red',
+                        action: function ()
+                        {
+                            cb(true);
+                        }
+                    },
+                    cancel: {
+                        text: "Cancel",
+                        btnClass: 'btn-blue',
+                        action: function ()
+                        {
+                            cb(false);
+                        }
+                    }
+                }
+            });
+        }
+        var activeplugin = undefined;
+        function removebackground()
+        {
+            ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "removeallbackgrounds", data: {} }));
+            activeplugin = undefined;
+        }
+        function viewbutton(name, isitem, plugin)
+        {
+            if (isitem)
+            {
+                var item = finditem(name, plugin);
+                showitem(plugin, item);
+            }
+            else
+                showplugin(name);
+        }
+        function infobutton(name, isitem)
+        {
+            //it is always plugin
+            var win = new BrowserWindow({ modal: true, width: 800, height: 600, parent: require('electron').remote.getCurrentWindow(), webPreferences: { preload: __dirname + "/displayus.js" }, title: name });
+            win.webContents.executeJavaScript("displayus._loaded();");
+            if (plugins.data[name].settings.info)
+                win.loadURL(url.format({ pathname: path.join(userdata, "plugins\\" + name + "\\" + (plugins.data[name].settings.info)), protocol: 'file:', slashes: true }));
+            else
+            {
+                fs.readFile(userdata + "\\plugins\\" + name + "\\package.json", (err, data) =>
+                {
+                    if (!err)
+                    {
+                        win.loadURL(url.format({ pathname: path.join(__dirname, "info.html"), protocol: 'file:', slashes: true }));
+                        var pluginstartdata = JSON.parse(data);
+                        if (!path.isAbsolute(pluginstartdata.preview))
+                            pluginstartdata.preview = userdata + "\\plugins\\" + name + "\\" + pluginstartdata.preview;
+                        pluginstartdata.preview = pluginstartdata.preview.replace("\\", "\\\\");
+                        win.webContents.executeJavaScript("onload(" + JSON.stringify(pluginstartdata) + ")");
+                    }
+                    else
+                        console.error(err);
+                });
+
+            }
+        }
+        var database = require(userdata + "/database.json");
+        autoupdatesett = database.autoupdateapp;
+        startautoupdatecheck();
+        var active = true, randomizer = { interval: undefined, time: database.changeinterval };
+
+        plugins = { data: {}, list: [] }, pluginorder = [];
+        var exiting = false;
+        function quit()
+        {
+            exiting = true;
+            ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "exit", data: {} }));
+        }
+        function minimizetotray()
+        {
+            ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "tray", data: {} }));
+        }
+        var displayuswebsiteinfo = {};
+        function getwebsiteinfo(address, cb)
+        {
+            request.get({ url: "http://" + address + "/info.json" }, function (err, res, body)
+            {
+                try
+                {
+                    displayuswebsiteinfo = JSON.parse(body);
+                    cb();
+                }
+                catch (e)
+                {
+                    setTimeout(() => { getwebsiteinfo(address, cb); }, 1000 * 60 * 5);
+                }
+
+            });
+        }
+        window.addEventListener("load", function ()
+        {
+            setdevtoolsev();
+            var db = JSON.parse(fs.readFileSync(path.join(userdata, "database.json")));
+            getwebsiteinfo(displayussite, function ()
+            {
+                setautoupdate("plugins", db.autoupdateplugins);
+            });
+            if (!db.donefirststartup)
+            {
+
+                appstartup.isEnabled().then(function (enabled)
+                {
+                    if (!enabled)
+                    {
+                        appstartup.enable();
+                        db.donefirststartup = true;
+                        fs.writeFileSync(path.join(userdata, "database.json"), JSON.stringify(db));
+                    }
+                })
+
+
+            }
+            window.addEventListener('beforeunload', function (e)
+            {
+                if (exiting)
+                {
+                    return true;
+                }
+                var db = JSON.parse(fs.readFileSync(path.join(userdata, "database.json")));
+                if (db.exitopt == "quit")
+                    quit();
+                else
+                {
+                    if (db.exitopt == "tray")
+                        minimizetotray();
+                    else
+                        var jc = $.confirm({
+                            backgroundDismiss: "true",
+                            type: "blue",
+                            boxWidth: "700px",
+                            title: 'Minimize to tray?',
+                            content: 'Do you want to exit or minimize to system tray?<br/>You can exit app from tray.<br/><br/><div class="checkbox"><label><input type="checkbox" id="remembercheckbox"> Remember this option</label></div>',
+                            buttons: {
+                                Tray: {
+                                    text: "Minimize to tray",
+                                    btnClass: 'btn-blue',
+                                    action: function ()
+                                    {
+                                        if ($("#remembercheckbox").is(":checked"))
+                                        {
+                                            db.exitopt = "tray";
+                                            fs.writeFile(path.join(userdata, "database.json"), JSON.stringify(db), function (err) { if (!err) minimizetotray(); else alert(err); });
+                                        }
+                                        else
+                                            minimizetotray();
+
+                                    }
+                                },
+                                Quit: {
+                                    text: "Quit",
+                                    btnClass: 'btn-red',
+                                    action: function ()
+                                    {
+                                        if ($("#remembercheckbox").is(":checked"))
+                                        {
+                                            db.exitopt = "quit";
+                                            fs.writeFile(path.join(userdata, "database.json"), JSON.stringify(db), function (err) { if (!err) quit(); else alert(err); });
+                                        }
+                                        else
+                                            quit();
+                                    }
+                                }
+                            }
+                        });
+                    currentwindow.focus();
+                    e.returnValue = 'false';
+                    return false;
+                }
+            });
+
+
+            var addingplugincounter = 0;
+            function checkpluginaddingdone()
+            {
+                if (--addingplugincounter == 0)
+                {
+                    calcpercents(currentpage == "additemfromplugins" ? true : false);
+                    document.getElementById("plugincards").innerHTML += ('<div class="addplugin" id="addplugin" onclick="addpluginclick()"  itemclick="true"><span style="position:absolute;top:50%;text-align:center;font-size:40px;transform:translateY(-50%)  translateX(-50%);margin:0;">+</span> </div>');
+                    setpositions("plugincards");
+
+
+                    document.getElementById("activate").onclick = function ()
+                    {
+                        document.getElementById("activatetext").innerHTML = document.getElementById("activatetext").innerHTML == "Activated" ? "Deactivated" : "Activated";
+                        active = !active;
+                        if (!active)
+                        {
+                            removebackground();
+                            clearInterval(randomizer.interval);
+                        }
+                        else
+                        {
+
+                            if (randomizer.time > 0)
+                                randomizer.interval = setInterval(changewall, randomizer.time);
+                        }
+                    }
+                    document.getElementById("backbutton").onclick = backbutton;
+                    if (active)
+                    {
+                        setTimeout(changewall, 500);
+                        if (randomizer.time > 0)
+                            randomizer.interval = setInterval(changewall, randomizer.time);
+
+                    }
+                    Waves.attach(".topbutton", []);
+                    Waves.attach(".editbutton", []);
+                    Waves.attach(".deletebutton", []);
+                    Waves.attach(".viewbutton", []);
+                    Waves.attach("#settingstext", []);
+                    Waves.init();
+                    for (var i = 0; i < plugins.list.length; i++)
+                    {
+                        var plugin = plugins.data[plugins.list[i]];
+                        var pluginmain = plugin.main;
+                        if (pluginmain && pluginmain)
+                            pluginmain(plugin.controller);
+                    }
+
+                }
+            }
+            for (var i = 0, dirs = getDirectories(path.join(userdata, "plugins")); i < dirs.length; i++)
+            {
+                plugin = dirs[i];
+
+                var sett, data;
+                try
+                {
+                    sett = require(userdata + "\\" + "plugins\\" + plugin + "\\package.json")
+
+                } catch (e) { console.error(e); }
+                try
+                {
+                    data = require(userdata + "\\" + "plugins\\" + plugin + "\\data.json")
+                } catch (e)
+                {
+                    data = { chance: 50, items: [] };
+                    fs.writeFileSync(userdata + "/plugins/" + plugin + "/data.json", JSON.stringify(data));
+                }
+
+
+                plugin = sett.guid || plugin;
+                plugins.list.push(plugin);
+
+                var mainjspath = userdata + "\\" + "plugins\\" + plugin + "\\" + (sett.main || "main.js");
+                plugins.data[plugin] = { settings: sett, data: data || {} };
+                if (fs.existsSync(mainjspath))
+                {
+                    try
+                    {
+                        plugins.data[plugin].main = require(mainjspath);
+                        plugins.data[plugin].controller = new plugincontroller(plugin);
+                        setTimeout(function ()
+                        {
+                            if (plugins.data[plugin].main)
+                            plugins.data[plugin].main(plugins.data[plugin].controller);
+                        }, 0);
+                    } catch (e) { console.error(e); }
+                }
+
+                addingplugincounter++;
+                /*
+                addplugin(plugin, function ()
+                {
+                    checkpluginaddingdone();
+                });
+                */
+                arr_loadplugins.push(plugin);
+            }
+            function nxtadditemsfromplugin(ind)
+            {
+                if (arr_loadplugins[ind])
+                    pluginclick(arr_loadplugins[ind], () => { setTimeout(() => { nxtadditemsfromplugin(++ind); }, 0); });
+                else
+                {
+                    loadeditems();
+                    arr_loadplugins = [];
+                }
+            }
+            itemcards.innerHTML = "";
+            nxtadditemsfromplugin(0);
+
+
+        });
+        function loadeditems()
+        {
+            //itemcards.innerHTML += ('<div class="additem" id="additem" onclick="if(event.target.getAttribute(\'itemclick\'))additemclick()"  itemclick="true"><span style="position:absolute;top:50%;text-align:center;font-size:40px;transform:translateY(-50%)  translateX(-50%);margin:0;">+</span> </div>');
+            setpositions("itemcards");
+            changewall();
+            inittopbarmenu();
+        }
+        var arr_loadplugins = [];
+        function globalsettings()
+        {
+
+            const BrowserWindow = remote.BrowserWindow;
+            var win = new BrowserWindow({ modal: true, width: 800, height: 600, parent: currentwindow, webPreferences: { preload: __dirname + "/displayus.js" } });
+            win.loadURL(url.format({ pathname: path.join(__dirname, "settings.html"), protocol: 'file:', slashes: true }));
+        }
+
+        function readyforimage()
+        {
+            ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "readyforimage", data: {} }));
+        }
+        var autoupdateenabled = { plugins: undefined, app: undefined };
+        var numinplugincheck = 0, countpluginnoguid = 0;
+        function setautoupdate(type, should)
+        {
+            if (type == "plugins")
+            {
+                if (should !== autoupdateenabled.plugins)
+                {
+                    if (should)
+                    {
+                        setcheckpluginupdate();
+                        autoupdateenabled.plugins = true;
+                    }
+                    else
+                        clearInterval(autoupdateenabled.plugins);
+                }
+            }
+        }
+        function setcheckpluginupdate()
+        {
+            autoupdateenabled.plugins = setTimeout(checkplugin, 1000 * 60 * 15 / plugins.list.length);
+        }
+        function checkplugin()
+        {
+            if (!numinplugincheck)
+            {
+                if (countpluginnoguid >= plugins.list.length)
+                {
+                    setcheckpluginupdate();
+                    return;
+                }
+                countpluginnoguid = -1;
+            }
+            numinplugincheck = numinplugincheck >= plugins.list.length - 1 ? 0 : numinplugincheck + 1;
+            var plugin = plugins.data[plugins.list[numinplugincheck]];
+
+            if (plugin.settings.guid)
+            {
+                getpluginlatestversion(plugin.settings.guid, function (err, ver)
+                {
+                    if (!err)
+                    {
+                        if (ver && ver > plugin.settings.version)
+                        {
+                            var job = createjob();
+                            job.desc = "Updating plugin " + plugin.settings.title;
+                            setincurrentjobs(job);
+                            installpluginfromwebsite(plugin.settings.guid, ver, job);
+                        }
+                    }
+                    else
+                        console.error(err)
+                    setcheckpluginupdate(plugin.settings.guid, ver);
+                })
+            }
+            else
+            {
+                countpluginnoguid++;
+                checkplugin();
+            }
+        }
+        function getpluginlatestversion(guid, cb)
+        {
+            getpluginpackagejson(guid, function (err, json)
+            {
+                if (!err)
+                {
+                    for (var key in json.versions)
+                    {
+                        var version = key;
+                        var versionrequirement = json.versions[version];
+                        if (appversion >= versionrequirement)
+                        {
+                            cb(false, version)
+                            break;
+                        }
+                    }
+                    cb(false, null);
+                }
+                else
+                    cb(err);
+            });
+        }
+        function getpluginpackagejson(guid, cb)
+        {
+            request.get({ url: displayuswebsiteinfo.protocol + "://" + displayuswebsiteinfo.address + "/" + displayuswebsiteinfo.pluginspath + "/" + guid + "/" + "info.json" }, function (err, res, body)
+            {
+                var plugindata = JSON.parse(body);
+                cb(err, plugindata);
+            });
+        }
+        function installpluginfromwebsite(guid, ver, job)
+        {
+
+            if (ver)
+                installpluginfromwebsitever(guid, ver, job);
+            else
+            {
+                getpluginlatestversion(guid, function (err, ver)
+                {
+                    if (err)
+                        console.error(err);
+                    else
+                        installpluginfromwebsitever(guid, ver, job);
+                });
+            }
+        }
+
+        function installpluginfromwebsitever(guid, ver, job)
+        {
+            var tmppath = userdata + "\\tmp\\" + guid + ".dus";
+            var file = fs.createWriteStream(tmppath);
+
+            var request = http.get("http://" + displayuswebsiteinfo.address + "/plugins/files/" + guid + "/" + ver + "/plugin.dus", function (response)
+            {
+                if (res.statusCode == 200)
+                {
+                    response.pipe(file);
+                    file.on("finish", function ()
+                    {
+                        addpluginfromfile(tmppath, true, job);
+                    });
+                }
+            });
+        }
+        var cursoronelectronwindow = false;
+        var mousepos = { x: 0, y: 0 };
+        var anotherwindowfullscreen = false;
+        ipcRenderer.on('asynchronous-reply', (event, arg) =>
+        {
+            arg = JSON.parse(arg);
+            switch (arg.type)
+            {
+                case "autoupdater":
+                    var type = arg.data.type;
+                    var args = arg.data.args;
+                    autoupdaterev(type, args);
+                    break;
+                case "anotherwindowfullscreenchanged":
+                    anotherwindowfullscreen = arg.data.isit;
+
+                    break;
+                case "appsettingschanged":
+                    switch (arg.data.type)
+                    {
+                        case "autoupdateplugins":
+                            setautoupdate("plugins", arg.data.data.shouldautoupdate);
+                            break;
+                        case "autoupdateapp":
+                            autoupdatesett = arg.data.shouldautoupdate;
+                            break;
+                    }
+                    break;
+                case "currentpointerpointing":
+                    cursoronelectronwindow = arg.data.pointing.class === "Chrome_RenderWidgetHostHWND" && arg.data.pointing.title === "Chrome Legacy Window";
+                    break;
+                case "protocolcall":
+                    var cmd = arg.data.command;
+                    if (cmd.length > 0)
+                    {
+                        alert(cmd);
+                        var cmdtype = cmd.split("?")[0];
+                        switch (cmdtype.substring(0, cmdtype.length - 1))
+                        {
+                            case "installofficial":
+                                var job = createjob();
+                                job.desc = "Downloading plugin " + plugin.settings.title;
+                                setincurrentjobs(job);
+                                installpluginfromwebsite(cmd.split("?")[1], undefined, job);
+                                break;
+                        }
+                    }
+                    break;
+                case "otherwindowmsg":
+                    var cmds = arg.data.cmds;
+                    for (var i = 0; i < cmds.length; i++)
+                    {
+                        var cmd = cmds[i];
+                        switch (cmd.type)
+                        {
+                            case "wallpaperchangeinterval":
+                                randomizer.time = cmd.data;
+                                clearInterval(randomizer.interval);
+                                if (randomizer.time > 0)
+                                    randomizer.interval = setInterval(changewall, randomizer.time);
+                                break;
+                        }
+                    }
+                    break;
+                case "additem":
+
+                    var item = { icon: arg.data.icon, id: arg.data.id, label: arg.data.label || "", description: arg.data.description || "", data: arg.data.data };
+                    getitemicon(arg.data.plugin, item, function (icon)
+                    {
+                        var newaddedelement = document.createElement("div");
+                        document.getElementById("itemcards").insertBefore(newaddedelement, document.getElementById("additem"));
+                        if (plugins.data[currentplugin].controller)
+                            plugins.data[currentplugin].controller.emit("itemadd", item.data);
+                        newaddedelement.outerHTML = ('<div class="card" style="opacity:0;" onmouseout="this.style.height=itemsdime.height+\'px\';document.getElementById(\'buttons-item-' + arg.data.id + '\').style.height=\'0px\';document.getElementById(\'item-' + arg.data.id + '\').style.zIndex=\'0\'" onmouseover="this.style.height=itemsdime.height+35+\'px\';document.getElementById(\'buttons-item-' + arg.data.id + '\').style.height=\'50px\';document.getElementById(\'item-' + arg.data.id + '\').style.zIndex=\'10\';" id="item-' + arg.data.id + '" onclick="if(event.target.getAttribute(\'itemclick\'))itemclick(\'' + arg.data.id + '\',\'' + currentplugin + '\')" item="' + arg.data.id + '" itemclick="true"> <img onload="itemimgload(this,\'' + arg.data.id + '\')"  itemclick="true" class="card-img-top img-fluid" src="' + icon + '" alt="Card image cap"> <div class="card-block"> <div style="left:0;width:250px;margin:0;position:relative;" itemclick="true"><h4 class="card-title">' + arg.data.label + '</h4></div><div class="buttons-item" id="buttons-item-' + arg.data.id + '"> <div class="editbutton" style="left:0px;width:50px;height:50px;position:relative;" onclick="editbutton(\'' + arg.data.id + '\',true,\'' + currentplugin + '\')"><svg style="top:-12.5px;left:-12.5px;position:absolute;width:75px;height:75px;">&#65279;<path transform="scale(1)" fill="rgb(20,120,255)" fill-opacity="1" stroke-width="0.2" stroke-linejoin="round" d="M 53.2929,21.2929L 54.7071,22.7071C 56.4645,24.4645 56.4645,27.3137 54.7071,29.0711L 52.2323,31.5459L 44.4541,23.7677L 46.9289,21.2929C 48.6863,19.5355 51.5355,19.5355 53.2929,21.2929 Z M 31.7262,52.052L 23.948,44.2738L 43.0399,25.182L 50.818,32.9601L 31.7262,52.052 Z M 23.2409,47.1023L 28.8977,52.7591L 21.0463,54.9537L 23.2409,47.1023 Z "></path></svg></div><div  onclick="viewbutton(\'' + arg.data.id + '\',true,\'' + arg.data.plugin + '\')" class="viewbutton" style="left:0px;width:50px;height:50px;position:relative;"><svg style="top:-12.5px;left:-12.5px;position:absolute;width:75px;height:75px;">&#65279;<path fill="rgb(70,220,70)" fill-opacity="1" stroke-width="0.2" stroke-linejoin="round" d="M 38,33.1538C 40.6765,33.1538 42.8462,35.3235 42.8462,38C 42.8462,40.6765 40.6765,42.8461 38,42.8461C 35.3235,42.8461 33.1539,40.6765 33.1539,38C 33.1539,35.3235 35.3236,33.1538 38,33.1538 Z M 38,25.0769C 49.3077,25.0769 59,33.1538 59,38C 59,42.8461 49.3077,50.9231 38,50.9231C 26.6923,50.9231 17,42.8461 17,38C 17,33.1538 26.6923,25.0769 38,25.0769 Z M 38,29.1154C 33.0932,29.1154 29.1154,33.0932 29.1154,38C 29.1154,42.9068 33.0932,46.8846 38,46.8846C 42.9068,46.8846 46.8846,42.9068 46.8846,38C 46.8846,33.0932 42.9068,29.1154 38,29.1154 Z "></path></svg></div> <div  onclick="deletebutton(\'' + arg.data.id + '\',true,\'' + arg.data.plugin + '\')" class="deletebutton" style="left:0px;width:50px;height:50px;position:relative;"><svg style="top:-12.5px;left:-12.5px;position:relative;width:75px;height:75px;">&#65279;<path fill="rgb(255,60,60)" fill-opacity="1" stroke-width="0.2" stroke-linejoin="round" d="M 25.3333,23.75L 50.6667,23.75C 51.5411,23.75 51.8541,27.3125 51.8541,27.3125L 24.1458,27.3125C 24.1458,27.3125 24.4589,23.75 25.3333,23.75 Z M 35.625,19.7917L 40.375,19.7917C 40.8122,19.7917 41.9583,20.9378 41.9583,21.375C 41.9583,21.8122 40.8122,22.9584 40.375,22.9584L 35.625,22.9584C 35.1878,22.9584 34.0416,21.8122 34.0416,21.375C 34.0416,20.9378 35.1878,19.7917 35.625,19.7917 Z M 27.7083,28.5L 48.2916,28.5C 49.1661,28.5 49.875,29.2089 49.875,30.0834L 48.2916,53.8334C 48.2916,54.7078 47.5828,55.4167 46.7083,55.4167L 29.2917,55.4167C 28.4172,55.4167 27.7083,54.7078 27.7083,53.8334L 26.125,30.0834C 26.125,29.2089 26.8339,28.5 27.7083,28.5 Z M 30.0833,31.6667L 30.4792,52.25L 33.25,52.25L 32.8542,31.6667L 30.0833,31.6667 Z M 36.4167,31.6667L 36.4167,52.25L 39.5833,52.25L 39.5833,31.6667L 36.4167,31.6667 Z M 43.1458,31.6667L 42.75,52.25L 45.5208,52.25L 45.9167,31.6667L 43.1458,31.6667 Z "></path></svg></div><div  onclick="infobutton(\'' + arg.data.id + '\',true,\'' + currentplugin + '\')" class="deletebutton" style="left:0px;width:50px;height:50px;position:relative;"><svg style="top:-12.5px;left:-12.5px;position:absolute;width:75px;height:75px;">&#65279;<path fill="#000000" fill-opacity="1" stroke-width="0.2" stroke-linejoin="round" d="M 31.6666,30.0834L 42.7499,30.0834L 42.7499,33.2501L 42.7499,52.2501L 45.9165,52.2501L 45.9165,57.0001L 31.6666,57.0001L 31.6666,52.2501L 34.8332,52.2501L 34.8332,34.8335L 31.6666,34.8335L 31.6666,30.0834 Z M 38.7917,19C 40.9778,19 42.75,20.7722 42.75,22.9583C 42.75,25.1445 40.9778,26.9167 38.7917,26.9167C 36.6055,26.9167 34.8333,25.1445 34.8333,22.9583C 34.8333,20.7722 36.6055,19 38.7917,19 Z "></path></svg></div></div> </div>');
+                        setTimeout(function ()
+                        {
+                            document.getElementById("item-" + arg.data.id).style.opacity = "1";
+                            Waves.attach(".topbutton", []);
+                            Waves.attach(".editbutton", []);
+                            Waves.attach(".deletebutton", []);
+                            Waves.attach(".viewbutton", []);
+                            Waves.init();
+                            setpositions("itemcards");
+
+                        }, 50);
+                    });
+
+                    break;
+                case "edititem":
+
+                    getitemicon(currentplugin, arg.data, function (icon)
+                    {
+                        if (plugins.data[currentplugin].controller)
+                            plugins.data[currentplugin].controller.emit("itemedit", arg.data);
+                        $(document.querySelector("#item-" + arg.data.id + " > .card-block ").children[0].children[0]).html(arg.data.label);
+                        document.querySelector("#item-" + arg.data.id).children[0].src = icon;
+                        var items = plugins.data[currentplugin].data.items;
+                        for (var i = 0; i < items.length; i++)
+                        {
+                            if (items[i].id == arg.data.id)
+                            {
+                                items[i] = arg.data;
+                                return;
+                            }
+                        }
+                    });
+
+                    break;
+                case "event":
+                    switch (arg.data.type)
+                    {
+                        case "mousemove":
+                            mousepos.x = arg.data.args[0];
+                            mousepos.y = arg.data.args[1];
+                            break;
+                        case "mouseevent":
+                            globalmouseevent(arg.data.args[0], arg.data.args[1]);
+                            break;
+                    }
+                    break;
+                case "ok":
+                    console.log("ok", arg)
+                    break;
+            }
+        })
+        ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "get_event", data: {} }));
+
+        var currentwall = { plugin: "", item: 0 };
+        function changewall()
+        {
+            var totalchance = 0;
+            for (var i = 0; i < plugins.list.length; i++)
+            {
+                if (plugins.data[plugins.list[i]].data.items.length > 0)
+                    totalchance += plugins.data[plugins.list[i]].data.chance;
+            }
+            if (!totalchance)
+                return false;
+            var rand = Math.random();
+            var counter = 0;
+            var availableitems = 0;
+            var resultrandom = false;
+            while (!resultrandom)
+            {
+                for (var i = 0; i < plugins.list.length; i++)
+                {
+                    if (plugins.data[plugins.list[i]].data.items.length < 1)
+                        continue;
+                    counter += plugins.data[plugins.list[i]].data.chance / totalchance;
+                    if (plugins.data[plugins.list[i]].data.items.length > 0 || true)
+                    {
+                        availableitems += plugins.data[plugins.list[i]].data.items.length;
+                        if (counter >= rand)
+                        {
+                            resultrandom = plugins.list[i];
+                            break;
+                        }
+                    }
+                }
+                if (availableitems == 0 && false)
+                    return false;
+            }
+            return showplugin(resultrandom);
+        }
+        function showplugin(pluginname)
+        {
+
+            var itemind = Math.floor(Math.random() * plugins.data[pluginname].data.items.length);
+            currentwall.item = itemind;
+            currentwall.plugin = pluginname;
+            var item = plugins.data[pluginname].data.items[itemind];
+            return showitem(pluginname, item)
+        }
+        var apptypeextentions = { "cs": "main.exe", "js": "index.html" };
+        function showitem(pluginname, item)
+        {
+            activeplugin = pluginname;
+            ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "newwall", data: { plugin: pluginname, item: item, path: userdata + "\\plugins\\" + pluginname + "\\" + (plugins.data[pluginname].settings.wallpaper || (plugins.data[pluginname].settings.apptype ? apptypeextentions[plugins.data[pluginname].settings.apptype] : "index.html")), apptype: (plugins.data[pluginname].settings.apptype ? plugins.data[pluginname].settings.apptype : "js") } }))
+            currentshowing.plugin = pluginname;
+            currentshowing.item = item;
+            return true;
+        }
+        function itemclick(item, plugin)
+        {
+            var item = finditem(item, plugin);
+            showitem(plugin, item);
+        }
+        var itemaddcount = 0;
+        function checkitemaddingdone(cb)
+        {
+            if (itemaddcount == 0 || --itemaddcount == 0)
+            {
+                /////////////////////////
+                var sett = plugins.data[currentplugin].settings;
+                sett.buttons = sett.buttons || {};
+                sett.buttons.items = sett.buttons.items || {};
+
+                Waves.attach(".topbutton", []);
+                Waves.attach(".editbutton", []);
+                Waves.attach(".deletebutton", []);
+                Waves.attach(".viewbutton", []);
+                Waves.init();
+
+                pluginscontainer.style.opacity = "0";
+                setTimeout(function ()
+                {
+                    pluginscontainer.style.zIndex = "-1";
+                    itemscontainer.style.zIndex = "1";
+                    itemscontainer.style.opacity = "1";
+                }, 250);
+                document.getElementById("backbutton").style.opacity = "0";
+                setTimeout(function ()
+                {
+                    document.getElementById("backbutton").style.display = "none";
+
+                }, 0);
+
+                var sett = plugins.data[currentplugin].settings;
+                var viewb, editb, deleteb;
+                buttons = sett.buttons || {};
+                buttons.plugin = buttons.plugin || {};
+                /*
+                if (checkshowbutton(buttons.plugin, "settings"))
+                {
+                    document.getElementById("settingsbutton").style.display = "block";
+                    setTimeout(function ()
+                    {
+                        document.getElementById("settingsbutton").style.opacity = "1";
+                    }, 0);
+                }
+                */
+                document.getElementById("globalsettingsbutton").style.display = "block";
+                document.getElementById("globalsettingsbutton").style.opacity = "1";
+                var items = document.getElementById("plugincards").children;
+                cb && cb();
+            }
+        }
+        var obj_imgcanvas = {}
+        function itemimgload(img, itemid, isplugin)
+        {
+            var cont = document.getElementById((isplugin ? "plugin-" : "item-") + itemid);
+            var c = document.querySelector("#" + (isplugin ? "plugin-" : "item-") + itemid + " > canvas");
+            if (c)
+            {
+            }
+            else
+            {
+
+                c = document.createElement("canvas");
+                c.height = 250;
+                c.width = 250;
+                c.style.position = "absolute";
+                c.style.left = "0px";
+                c.style.top = "250px";
+                c.style.zIndex = "-1";
+                c.setAttribute("class", "bluritemcanvas");
+                cont.appendChild(c);
+            }
+            var ctx = c.getContext("2d");
+
+            ctx.clearRect(0, 0, c.width, c.height);
+            ctx.drawImage(img, 0, 0, c.width, 75);
+            boxBlurCanvasRGBA(c, 0, 0, c.width, c.height, 0);
+
+
+
+
+        }
+        function contextmenuclick(e, plugin, itemid)
+        {
+            if (!(plugin == currentshowing.plugin && itemid == currentshowing.item.id))
+                return;
+            var Menu = new menu();
+            var menuItem = new menuitem({
+                label: "Toggle Developer Tools",
+                click: () =>
+                {
+                    ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "togglevisiblewallpaperdevtools", data: {} }));
+                }
+            });
+            Menu.append(menuItem);
+            if (itemid)
+            {
+                e.preventDefault();
+                Menu.popup(remote.getCurrentWindow());
+            }
+            else
+            {
+
+            }
+        }
+        function pluginclick(plugin, cb, forceadditem)
+        {
+            if (currentpage == "additemfromplugins")
+            {
+                var item = finditem(name, plugin);
+                ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "newwall", data: { previewtype: "add", plugin: plugin, item: item, path: userdata + "\\plugins\\" + plugin + "\\" + (plugins.data[plugin].settings.wallpaper || (plugins.data[plugin].settings.apptype ? apptypeextentions[plugins.data[plugin].settings.apptype] : "index.html")), apptype: (plugins.data[plugin].settings.apptype ? plugins.data[plugin].settings.apptype : "js"), preview: true/*, bw: { width: mainscreen.workAreaSize.width - 300, kiosk: false, height: mainscreen.workAreaSize.height, x: 0, y: 0} */ } }))
+                currentshowing.prev.item = currentshowing.item;
+                currentshowing.prev.plugin = currentshowing.plugin;
+
+                currentshowing.plugin = plugin;
+                currentshowing.item = name;
+
+                settosidepreview(function ()
+                {
+
+                });
+
+                currentplugin = plugin;
+
+                var settingswebview = document.getElementById("wallpapersettings");
+                if (settingswebview)
+                {
+                    settingswebview.remove();
+                    settingswebview = null;
+                }
+
+                document.getElementById("prevcont").innerHTML += ' <webview id="wallpapersettings" nodeintegration style="height:100%;width:100%;"></webview>';
+                settingswebview = document.getElementById("wallpapersettings");
+
+                settingswebview.setAttribute("preload", __dirname + "/displayus.js");
+                settingswebview.src = path.join(userdata, "plugins/" + currentplugin + "/" + (plugins.data[currentplugin].settings.modify || "modify.html"));
+                settingswebview.addEventListener("did-finish-load", () =>
+                {
+                    var swvwebcontents = settingswebview.getWebContents();
+                    swvwebcontents.executeJavaScript("displayus.plugin='" + plugin + "';displayus.type='" + ("add") + "';displayus.getItem=function(cb){cb()};displayus._loaded();");
+                });
+                settingswebview.addEventListener('ipc-message', (event) =>
+                {
+                    var msg = JSON.parse(event.channel);
+                    switch (msg.type)
+                    {
+                        case "item-change":
+                            pluginitem = msg.data.item;
+                            ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "previewitemchange", data: { item: pluginitem } }));
+                            break;
+                        case "modify-status":
+                            var type = msg.data.type;
+                            if (type == "save")
+                            {
+                                pluginitem = msg.data.item || pluginitem;
+                                pluginitem.plugin = plugin;
+                                var id = "item" + (Math.random() * Math.pow(10, 16)).toFixed(0);
+                                pluginitem.id = id;
+
+                            }
+                            backbutton();
+                            closepreviewsettings(() =>
+                            {
+                                if (type == "save")
+                                {
+                                    pluginitem.plugin = plugin;
+                                    pluginitem.id = pluginitem.id || "item" + (Math.random() * Math.pow(10, 16)).toFixed(0);
+                                    ipcRenderer.send("asynchronous-message", JSON.stringify({ type: "additem", data: pluginitem }));
+                                }
+                            });
+
+                            break;
+                    }
+                });
+                var pluginitem;
+
+                document.getElementById("maincont").style.opacity = 0;
+                document.getElementById("prevcont").style.opacity = 1;
+                document.getElementById("prevcont").style.display = "block";
+                setTimeout(function ()
+                {
+                    document.getElementById("maincont").style.display = "none";
+                }, 500);
+            }
+            else
+                if (currentpage == "items" || forceadditem)
+                {
+                    /* if (plugins.data[plugin].settings.buttons && plugins.data[plugin].settings.buttons.plugin && plugins.data[plugin].settings.buttons.plugin.click === "none")
+                         return;*/
+                    var itemcards = document.getElementById("itemcards"), pluginscontainer = document.getElementById("pluginscontainer"), itemscontainer = document.getElementById("itemscontainer");
+                    if (false && plugins.data[plugin].settings.singleitem)
+                    {
+
+                        /*
+                        document.getElementById("itemcards").innerHTML = "<webview id='managepluginwebview' nodeintegration style='width:100%;height:calc(100% - 100px);position:fixed;left:0px;top:100px;'></webview>";
+                        var wv = document.getElementById("managepluginwebview");
+                        wv.preload = __dirname + "\\displayus.js";
+                        wv.src = path.join(userdata, "plugins\\" + plugin + "\\" + (plugins.data[plugin].settings.manageplugin));
+                        pluginscontainer.style.opacity = "0";
+                        setTimeout(function ()
+                        {
+                            pluginscontainer.style.zIndex = "-1";
+                            itemscontainer.style.zIndex = "1";
+                            itemscontainer.style.opacity = "1";
+                        }, 250);
+                        document.getElementById("backbutton").style.display = "block";
+                        setTimeout(function ()
+                        {
+                            document.getElementById("backbutton").style.opacity = "1";
+                        }, 0);
+                        var sett = plugins.data[plugin].settings;
+                        var viewb, editb, deleteb;
+                        buttons = sett.buttons || {};
+                        buttons.plugin = buttons.plugin || {};
+                        if (checkshowbutton(buttons.plugin, "settings"))
+                        {
+                            document.getElementById("settingsbutton").style.display = "block";
+                            setTimeout(function ()
+                            {
+                                document.getElementById("settingsbutton").style.opacity = "1";
+                            }, 0);
+                        }
+                        document.getElementById("globalsettingsbutton").style.opacity = "0";
+                        setTimeout(function ()
+                        {
+                            document.getElementById("globalsettingsbutton").style.display = "none";
+                        }, 500);
+                        */
+                    }
+                    else
+                    {
+
+
+                        currentplugin = plugin;
+                        var il = plugins.data[plugin].data.items.length;
+                        itemaddcount = il;
+                        if (il == 0)
+                        {
+                            itemaddcount = 1;
+                            if (!forceadditem)
+                                checkitemaddingdone(cb);
+                            setpositions("itemcards");
+                        }
+                        else
+                            for (var i = 0; i < il; i++)
+                            {
+                                var item = plugins.data[plugin].data.items[i];
+
+                                (function (item)
+                                {
+                                    getitemicon(plugin, item, function (icon)
+                                    {
+                                        var sett = plugins.data[plugin].settings;
+                                        var viewb, editb, deleteb;
+                                        buttons = sett.buttons || {};
+                                        buttons.items = buttons.items || {};
+                                        viewb = checkshowbutton(buttons.items, "view");
+                                        viewb = viewb ? '<div  title="View Item" onclick="viewbutton(\'' + item.id + '\',true,\'' + plugin + '\')" class="viewbutton" style="left:0px;width:50px;height:50px;position:relative;"><svg style="top:-12.5px;left:-12.5px;position:absolute;width:75px;height:75px;">&#65279;<path fill="rgb(70,220,70)" fill-opacity="1" stroke-width="0.2" stroke-linejoin="round" d="M 38,33.1538C 40.6765,33.1538 42.8462,35.3235 42.8462,38C 42.8462,40.6765 40.6765,42.8461 38,42.8461C 35.3235,42.8461 33.1539,40.6765 33.1539,38C 33.1539,35.3235 35.3236,33.1538 38,33.1538 Z M 38,25.0769C 49.3077,25.0769 59,33.1538 59,38C 59,42.8461 49.3077,50.9231 38,50.9231C 26.6923,50.9231 17,42.8461 17,38C 17,33.1538 26.6923,25.0769 38,25.0769 Z M 38,29.1154C 33.0932,29.1154 29.1154,33.0932 29.1154,38C 29.1154,42.9068 33.0932,46.8846 38,46.8846C 42.9068,46.8846 46.8846,42.9068 46.8846,38C 46.8846,33.0932 42.9068,29.1154 38,29.1154 Z "></path></svg></div>' : "";
+                                        editb = checkshowbutton(buttons.items, "edit");
+                                        editb = (editb ? ' <div  title="Edit" class="editbutton" style="left:0px;width:50px;height:50px;position:relative;" onclick="editbutton(\'' + item.id + '\',true,\'' + plugin + '\')"><svg style="top:-12.5px;left:-12.5px;position:absolute;width:75px;height:75px;">&#65279;<path transform="scale(1)" fill="rgb(20,120,255)" fill-opacity="1" stroke-width="0.2" stroke-linejoin="round" d="M 53.2929,21.2929L 54.7071,22.7071C 56.4645,24.4645 56.4645,27.3137 54.7071,29.0711L 52.2323,31.5459L 44.4541,23.7677L 46.9289,21.2929C 48.6863,19.5355 51.5355,19.5355 53.2929,21.2929 Z M 31.7262,52.052L 23.948,44.2738L 43.0399,25.182L 50.818,32.9601L 31.7262,52.052 Z M 23.2409,47.1023L 28.8977,52.7591L 21.0463,54.9537L 23.2409,47.1023 Z "></path></svg></div>' : '');
+                                        deleteb = checkshowbutton(buttons.items, "delete");
+                                        deleteb = deleteb ? '<div  title="Delete" onclick="deletebutton(\'' + item.id + '\',true,\'' + plugin + '\')" class="deletebutton" style="left:0px;width:50px;height:50px;position:relative;"><svg style="top:-12.5px;left:-12.5px;position:relative;width:75px;height:75px;">&#65279;<path fill="rgb(255,60,60)" fill-opacity="1" stroke-width="0.2" stroke-linejoin="round" d="M 25.3333,23.75L 50.6667,23.75C 51.5411,23.75 51.8541,27.3125 51.8541,27.3125L 24.1458,27.3125C 24.1458,27.3125 24.4589,23.75 25.3333,23.75 Z M 35.625,19.7917L 40.375,19.7917C 40.8122,19.7917 41.9583,20.9378 41.9583,21.375C 41.9583,21.8122 40.8122,22.9584 40.375,22.9584L 35.625,22.9584C 35.1878,22.9584 34.0416,21.8122 34.0416,21.375C 34.0416,20.9378 35.1878,19.7917 35.625,19.7917 Z M 27.7083,28.5L 48.2916,28.5C 49.1661,28.5 49.875,29.2089 49.875,30.0834L 48.2916,53.8334C 48.2916,54.7078 47.5828,55.4167 46.7083,55.4167L 29.2917,55.4167C 28.4172,55.4167 27.7083,54.7078 27.7083,53.8334L 26.125,30.0834C 26.125,29.2089 26.8339,28.5 27.7083,28.5 Z M 30.0833,31.6667L 30.4792,52.25L 33.25,52.25L 32.8542,31.6667L 30.0833,31.6667 Z M 36.4167,31.6667L 36.4167,52.25L 39.5833,52.25L 39.5833,31.6667L 36.4167,31.6667 Z M 43.1458,31.6667L 42.75,52.25L 45.5208,52.25L 45.9167,31.6667L 43.1458,31.6667 Z "></path></svg></div>' : "";
+                                        itemcards.innerHTML += ('<div class="card" oncontextmenu="contextmenuclick(event,\'' + plugin + '\',\'' + item.id + '\')" onmouseout="this.style.height=itemsdime.height+\'px\';document.getElementById(\'buttons-item-' + item.id + '\').style.height=\'0px\';this.style.zIndex=\'0\'" onmouseover="this.style.height=itemsdime.height+35+\'px\';document.getElementById(\'buttons-item-' + item.id + '\').style.height=\'50px\';document.getElementById(\'item-' + item.id + '\').style.zIndex=\'10\';" id="item-' + item.id + '" onclick="if(event.target.getAttribute(\'itemclick\'))itemclick(\'' + item.id + '\',\'' + plugin + '\')" item="' + item.id + '" itemclick="true"> <img onload="itemimgload(this,\'' + item.id + '\')"  itemclick="true" class="card-img-top img-fluid" src="' + icon + '" alt="Card image cap"/> <div class="card-block"> <div style="left:0;width:250px;margin:0;position:relative;" itemclick="true"><h4 class="card-title">' + item.label + '</h4></div><div class="buttons-item" id="buttons-item-' + item.id + '">' + editb + viewb + deleteb + ' </div> </div>');
+                                        if (!forceadditem)
+                                            checkitemaddingdone(cb);
+                                        setpositions("itemcards");
+                                    })
+                                })(item);
+                            }
+                    }
+                }
+        }
+        function pluginsettings()
+        {
+            var win = new BrowserWindow({ modal: true, width: 800, height: 600, parent: currentwindow, webPreferences: { preload: __dirname + "/displayus.js" } });
+            win.webContents.executeJavaScript(";displayus.plugin='" + currentplugin + "';displayus.type='" + ("add") + "'");
+            win.loadURL(url.format({ pathname: path.join(userdata, "plugins/" + currentplugin + "/settings.html"), protocol: 'file:', slashes: true }))
+        }
+        var changingpage = false;
+        function backbutton()
+        {
+            if (changingpage)
+                return;
+
+            changingpage = true;
+            topbarbuttons.left.splice(topbarbuttons.left.indexOf("backbutton"), 1);
+            if (currentpage == "additemfromplugins")
+                topbarbuttons.right.unshift("additembutton");
+            topbarbuttons.right.push("managepluginsbutton");
+            topbarbuttons.set();
+            currentpage = "items";
+
+            document.getElementById("itemscontainer").style.display = "block";
+            setTimeout(() =>
+            {
+                document.getElementById("pluginscontainer").style.opacity = "0";
+                document.getElementById("pluginscontainer").style.zIndex = "-1";
+                document.getElementById("itemscontainer").style.zIndex = "1";
+                document.getElementById("itemscontainer").style.opacity = "1";
+            }, 0);
+            setTimeout(() =>
+            {
+
+                document.getElementById("pluginscontainer").style.display = "none";
+                changingpage = false;
+            }, 500);
+            /*
+            document.getElementById("itemscontainer").style.opacity = "0";
+
+            setTimeout(function ()
+            {
+                document.getElementById("itemcards").innerHTML = "";
+                document.getElementById("pluginscontainer").style.opacity = "1";
+
+                document.getElementById("pluginscontainer").style.zIndex = "1";
+                document.getElementById("itemscontainer").style.zIndex = "-1";
+            }, 250)
+
+            document.getElementById("backbutton").style.opacity = "0";
+
+            setTimeout(function ()
+            {
+                document.getElementById("backbutton").style.display = "none";
+            }, 500);
+            document.getElementById("settingsbutton").style.opacity = "0";
+
+            setTimeout(function ()
+            {
+                document.getElementById("settingsbutton").style.display = "none";
+            }, 500);
+            document.getElementById("globalsettingsbutton").style.display = "block";
+
+            setTimeout(function ()
+            {
+
+                document.getElementById("globalsettingsbutton").style.opacity = "1";
+            }, 0);
+            */
+        }
+        var currentplugin;
+        function additemclick(plugin)
+        {
+            currentplugin = plugin;
+            const BrowserWindow = remote.BrowserWindow;
+
+            var win = new BrowserWindow({ modal: true, width: 800, height: 600, parent: currentwindow, webPreferences: { preload: __dirname + "/displayus.js" } });
+            win.webContents.executeJavaScript("displayus.plugin='" + currentplugin + "';displayus.type='" + ("add") + "';displayus.getItem=function(cb){cb();};displayus._loaded();");
+            win.loadURL(url.format({ pathname: path.join(userdata, "plugins/" + currentplugin + "/" + (plugins.data[currentplugin].settings.modify || "modify.html")), protocol: 'file:', slashes: true }))
+
+        }
+        function addpluginclick()
+        {
+            document.getElementById("addplugincont").style.display = "block";
+            setTimeout(function ()
+            {
+                document.getElementById("addplugincont").style.opacity = "0.9";
+            }, 0);
+
+        }
+        function checkshowbutton(obj, button)
+        {
+            if (obj[button] === undefined)
+                return true;
+            else
+                return obj[button];
+        }
+        function addplugin(plugin, cb)
+        {
+            getpluginicon(plugin, function (icon)
+            {
+                pluginorder.push(plugin);
+                ///////////////////////////////////
+                var sett = plugins.data[plugin].settings;
+                sett.buttons = sett.buttons || {};
+                var buttons = sett.buttons;
+
+                buttons.plugin = buttons.plugin || {};
+                var infob, viewb, deleteb;
+                viewb = checkshowbutton(buttons.plugin, "view");
+                viewb = viewb ? '<div  title="View Item" onclick="viewbutton(\'' + plugin + '\',false,\'' + plugin + '\')" class="viewbutton" style="left:0px;width:50px;height:50px;position:relative;"><svg style="top:-12.5px;left:-12.5px;position:absolute;width:75px;height:75px;">&#65279;<path fill="rgb(70,220,70)" fill-opacity="1" stroke-width="0.2" stroke-linejoin="round" d="M 38,33.1538C 40.6765,33.1538 42.8462,35.3235 42.8462,38C 42.8462,40.6765 40.6765,42.8461 38,42.8461C 35.3235,42.8461 33.1539,40.6765 33.1539,38C 33.1539,35.3235 35.3236,33.1538 38,33.1538 Z M 38,25.0769C 49.3077,25.0769 59,33.1538 59,38C 59,42.8461 49.3077,50.9231 38,50.9231C 26.6923,50.9231 17,42.8461 17,38C 17,33.1538 26.6923,25.0769 38,25.0769 Z M 38,29.1154C 33.0932,29.1154 29.1154,33.0932 29.1154,38C 29.1154,42.9068 33.0932,46.8846 38,46.8846C 42.9068,46.8846 46.8846,42.9068 46.8846,38C 46.8846,33.0932 42.9068,29.1154 38,29.1154 Z "></path></svg></div>' : "";
+                infob = checkshowbutton(buttons.plugin, "edit");
+                infob = (infob ? ' <div  title="Info" onclick="infobutton(\'' + plugin + '\',false)" class="deletebutton" style="left:0px;width:50px;height:50px;position:relative;"><svg style="top:-12.5px;left:-12.5px;position:absolute;width:75px;height:75px;">&#65279;<path fill="#000000" fill-opacity="1" stroke-width="0.2" stroke-linejoin="round" d="M 31.6666,30.0834L 42.7499,30.0834L 42.7499,33.2501L 42.7499,52.2501L 45.9165,52.2501L 45.9165,57.0001L 31.6666,57.0001L 31.6666,52.2501L 34.8332,52.2501L 34.8332,34.8335L 31.6666,34.8335L 31.6666,30.0834 Z M 38.7917,19C 40.9778,19 42.75,20.7722 42.75,22.9583C 42.75,25.1445 40.9778,26.9167 38.7917,26.9167C 36.6055,26.9167 34.8333,25.1445 34.8333,22.9583C 34.8333,20.7722 36.6055,19 38.7917,19 Z "></path></svg></div>' : '');
+                deleteb = checkshowbutton(buttons.plugin, "delete");
+                deleteb = deleteb ? '<div  title="Delete"  onclick="deletebutton(\'' + plugin + '\',false,\'' + plugin + '\')" class="deletebutton" style="left:0px;width:50px;height:50px;position:relative;"><svg style="top:-12.5px;left:-12.5px;position:relative;width:75px;height:75px;">&#65279;<path fill="rgb(255,60,60)" fill-opacity="1" stroke-width="0.2" stroke-linejoin="round" d="M 25.3333,23.75L 50.6667,23.75C 51.5411,23.75 51.8541,27.3125 51.8541,27.3125L 24.1458,27.3125C 24.1458,27.3125 24.4589,23.75 25.3333,23.75 Z M 35.625,19.7917L 40.375,19.7917C 40.8122,19.7917 41.9583,20.9378 41.9583,21.375C 41.9583,21.8122 40.8122,22.9584 40.375,22.9584L 35.625,22.9584C 35.1878,22.9584 34.0416,21.8122 34.0416,21.375C 34.0416,20.9378 35.1878,19.7917 35.625,19.7917 Z M 27.7083,28.5L 48.2916,28.5C 49.1661,28.5 49.875,29.2089 49.875,30.0834L 48.2916,53.8334C 48.2916,54.7078 47.5828,55.4167 46.7083,55.4167L 29.2917,55.4167C 28.4172,55.4167 27.7083,54.7078 27.7083,53.8334L 26.125,30.0834C 26.125,29.2089 26.8339,28.5 27.7083,28.5 Z M 30.0833,31.6667L 30.4792,52.25L 33.25,52.25L 32.8542,31.6667L 30.0833,31.6667 Z M 36.4167,31.6667L 36.4167,52.25L 39.5833,52.25L 39.5833,31.6667L 36.4167,31.6667 Z M 43.1458,31.6667L 42.75,52.25L 45.5208,52.25L 45.9167,31.6667L 43.1458,31.6667 Z "></path></svg></div>' : "";
+                var pcih = document.getElementById("plugincards").innerHTML, pcihi = pcih.indexOf('<div class="addplugin" id="addplugin"');
+                var addtxt = ('<div class="card" oncontextmenu="contextmenuclick(event,\'' + plugin + '\')" onmouseout="this.style.height=itemsdime.height+\'px\';document.getElementById(\'buttons-plugin-' + plugin + '\').style.height=\'0px\';this.style.zIndex=\'0\'" ' + (currentpage !== "additemfromplugins" ? 'onmouseover="this.style.height=itemsdime.height+100+\'px\';document.getElementById(\'buttons-plugin-' + plugin + '\').style.height=\'200px\';this.style.zIndex=\'10\';"' : "") + ' id="plugin-' + plugin + '" onclick="if(event.target.getAttribute(\'itemclick\'))pluginclick(\'' + plugin + '\')" plugin="' + plugin + '" itemclick="true" > <img onload="itemimgload(this,\'' + plugin + '\',true)"  itemclick="true" class="card-img-top img-fluid" src="' + icon + '" alt="Card image cap"> <div class="card-block"> <div style="left:0;width:250px;margin:0;position:relative;" itemclick="true"><h4 class="card-title">' + plugins.data[plugin].settings.title + '</h4> <p class="card-text">' + "" + '</p></div><div class="buttons-plugin" id="buttons-plugin-' + plugin + '">' + viewb + deleteb + infob + ' <input style="position:relative;top:0px;left:0px;width:200px" type="range" value="' + (plugins.data[plugin].data.chance == undefined ? 50 : plugins.data[plugin].data.chance) + '" class="chanceslider" id="chanceslider-' + plugin + '" /></div><div class="chance"><span>Chance: </span><span id="chancepercent-' + plugin + '"></span><span>%</span></div> </div> </div>');;
+                if (pcihi > -1)
+                {
+                    var newaddedelement = document.createElement("div");
+
+                    document.getElementById("plugincards").insertBefore(newaddedelement, document.getElementById("addplugin"))
+                    newaddedelement.outerHTML = addtxt;
+                }
+                else
+                    document.getElementById("plugincards").innerHTML += addtxt;
+                setTimeout(function ()
+                {
+                    Waves.attach(".topbutton", []);
+                    Waves.attach(".editbutton", []);
+                    Waves.attach(".deletebutton", []);
+                    Waves.attach(".viewbutton", []);
+                    Waves.init();
+                    setpositions("plugincards");
+                }, 0);
+                (function (plugin) { setTimeout(function () { document.getElementById("chanceslider-" + plugin).oninput = function () { calcpercents(currentpage == "additemfromplugins" ? true : false); }; calcpercents(currentpage == "additemfromplugins" ? true : false); }, 0); })(plugin);
+                cb && cb();
+            });
+        }
+        function getpluginicon(plugin, cb)
+        {
+            fs.exists(userdata + "\\plugins\\" + plugin + "\\icon.png", function (exists)
+            {
+                if (exists)
+                    cb(userdata + "\\plugins\\" + plugin + "\\icon.png");
+                else
+                    cb(__dirname + "\\logoitemicon.png");
+            });
+        }
+        function getitemicon(plugin, item, cb)
+        {
+            if (item.data)
+                item.icon = item.icon || item.data.icon;
+            if (item.icon)
+            {
+                if (item.icon.substr(0, 5) == "data:")
+                    cb(item.icon);
+                else
+                {
+                    var iconpath = item.icon.indexOf(":\\") == -1 ? __dirname + (item.icon[0] == "\\" || item.icon[0] == "/" ? "" : "\\") + item.icon.replace("./", "").replace(".\\", "") : item.icon;
+                    fs.exists(iconpath, function (exists)
+                    {
+                        if (exists)
+                            cb(iconpath + "?x=" + (Math.random() * Math.pow(10, 16)));
+                        else
+                            getpluginicon(plugin, function (iconpath2) { cb(iconpath2 + "?x=" + (Math.random() * Math.pow(10, 16))); });
+                    });
+                }
+            }
+            else
+                getpluginicon(plugin, function (iconpath2) { cb(iconpath2); });
+        }
+        var savingdata = 0, arr_savingdatacb = [];
+        function adddatasavingdoneevent(cb)
+        {
+            arr_savingdatacb.push(cb);
+        }
+        function datasavingdone()
+        {
+            if (--savingdata == 0 && arr_savingdatacb.length > 0)
+            {
+                arr_savingdatacb[0]();
+                arr_savingdatacb.splice(0, 1);
+            }
+        }
+        function saveplugindata(plugin)
+        {
+            fs.writeFile(path.join(userdata, "plugins/" + plugin + "/data.json"), JSON.stringify(plugins.data[plugin].data), "utf8", datasavingdone);
+            savingdata++;
+        }
+        function calcpercents(none)
+        {
+            if (savingdata == 0)
+            {
+                var total = 0, arr_sliderval = [];
+                for (var i = 0; i < plugins.list.length; i++)
+                {
+                    var sv = document.getElementById("chanceslider-" + plugins.list[i]);
+                    if (!sv)
+                        continue;
+                    var val = parseInt(sv.value);
+                    plugins.data[plugins.list[i]].data.chance = val;
+                    saveplugindata(plugins.list[i])
+                    arr_sliderval.push({ name: plugins.list[i], val: val })
+                    total += val;
+
+                }
+                for (var i = 0; i < arr_sliderval.length; i++)
+                {
+                    document.getElementById("chancepercent-" + arr_sliderval[i].name).innerHTML = none ? "" : ((arr_sliderval[i].val / (total || 1)) * 100).toFixed(0);
+                }
+                if (none)
+                    Array.from(document.getElementsByClassName("chance")).forEach((chel) => { Array.from(chel.children).forEach((el) => { el.innerHTML = ""; }); });
+                else
+                    Array.from(document.getElementsByClassName("chance")).forEach((chel) => { Array.from(chel.children).forEach((el, i) => { el.innerHTML = i == 0 ? "Chance: " : i == 2 ? "%" : el.innerHTML; }); });
+            }
+            else
+                adddatasavingdoneevent(function () { calcpercents(none); });
+        }
+        var itemsmargin = { x: 30, y: 25 };
+        var itemsdime = { width: 250, height: 315 };
+        var dontchangepositions = false;
+        var firstsetpos = true;
+        var analytics;
+        function setpositions(x)
+        {
+            var cont = document.getElementById(x);
+
+            var pluginitems = cont.children;
+
+
+            if (currentpage == "items")
+            {
+                var shouldbe = Array.from(pluginitems).length > 0 ? "none" : "block";
+                var is = $("#noitem").css("display");
+                if (shouldbe !== is)
+                {
+                    $("#noitem").css("display", shouldbe);
+                }
+            }
+
+            var cols = Math.min(Math.floor((innerWidth - itemsmargin.x) / (itemsdime.width + itemsmargin.x)), pluginitems.length);
+
+            var itemsmarginx = itemsmargin.x + (innerWidth - (Math.floor(cols) * (itemsdime.width + itemsmargin.x) + itemsmargin.x)) / (cols + 1);
+            cols = Math.floor(cols);
+            var rows = Math.floor(pluginitems.length / cols);
+            var lastx;
+            for (var i = 0, itemsl = pluginitems.length; i < itemsl; i++)
+            {
+                var item = pluginitems[i];
+                var marginx = itemsmarginx;
+                item.style.left = ((i % cols)) * (marginx + itemsdime.width) + marginx + "px";
+                item.style.top = (Math.floor(i / cols)) * (itemsmargin.y + itemsdime.height) + itemsmargin.y * 2 + "px";
+            }
+            $(cont).height(((rows) * (itemsdime.height + itemsmargin.y)) - itemsdime.height / 2 + itemsmargin.y + (currentpage == "manageplugins" ? 70 : 0)/*+ (x == "plugincards" ? (currentpage == "additemfromplugins" ? 210 : 290) : 130)*/);
+        }
+        var lastsetsize = Date.now();
+        window.addEventListener("resize", function ()
+        {
+            if (Date.now() - lastsetsize > 100)
+            {
+                setpositions("plugincards");
+                setpositions("itemcards");
+                lastsetsize = Date.now();
+            }
+            else
+            {
+                setTimeout(() =>
+                {
+                    if (Date.now() - lastsetsize > 100)
+                    {
+                        setpositions("plugincards");
+                        setpositions("itemcards");
+                        lastsetsize = Date.now();
+                    }
+                }, 100);
+            }
+            var webview = document.getElementById("managepluginwebview");
+            if (webview)
+            {
+                webview.style.left = "0px";
+                webview.style.top = "100px";
+                //".setAttribute("style", "width: 100 %;height: calc(100 % - 100px); position: fixed; left: 0px; top: 100px; ");
+            }
+        })
+
+        function choosedus()
+        {
+
+            dialog.showOpenDialog({
+                properties: ["openFile"],
+                title: "Choose plugin file", buttonLabel: "Install", filters: [
+                    { name: 'Displayus plugin', extensions: ['dus'] }
+                ]
+            }, function (filepaths)
+                {
+                    if (filepaths[0])
+                    {
+                        hideaddplugin();
+                        var job = createjob();
+                        job.desc = "Extracting plugin package";
+                        setincurrentjobs(job);
+                        addpluginfromfile(filepaths[0], false, job);
+                    }
+                });
+        }
+        var obj_topbuttons = {};
+        window.addEventListener("load", function ()
+        {
+
+
+            var addplugincont = document.getElementById("addplugincont");
+            document.ondragover = document.ondrop = function (ev)
+            {
+                ev.preventDefault()
+            }
+
+            addplugincont.ondrop = function (ev)
+            {
+                hideaddplugin();
+                var job = createjob();
+                job.desc = "Extracting plugin package";
+                setincurrentjobs(job);
+                addpluginfromfile(ev.dataTransfer.files[0].path, false, job);
+                ev.preventDefault()
+            }
+
+
+
+        });
+
+        analytics = require("./js/analytics.js");
+        currentwindow.on("show", () =>
+        {
+            analytics.screenView('MainWindow');
+            currentview = "MainWindow";
+        });
+        currentwindow.on("hide", () =>
+        {
+            analytics.screenView('Tray');
+            currentview = "Tray";
+        });
+        var currentview = "MainWindow";
+        setTimeout(() =>
+        {
+            setInterval((() =>
+            {
+                analytics.screenView(currentview);
+                if (lastactiveplugin !== activeplugin)
+                {
+                    analytics.custom({
+                        't': 'pageview',
+                        'dt': plugins.data[activeplugin].settings.name,
+                        'dl': plugins.data[activeplugin].settings.version
+                    });
+                    lastactiveplugin = activeplugin;
+                }
+                return this;
+            })(), 1000 * 60 * 5);
+        }, 1000 * 10);
+
+        var lastactiveplugin;
+
+        function hideaddplugin(event)
+        {
+            document.getElementById("addplugincont").style.opacity = "0";
+            setTimeout(function ()
+            {
+
+                document.getElementById("addplugincont").style.display = "none";
+            }, 300);
+            event && event.preventDefault();
+        }
+        function setdevtoolsev()
+        {
+            var presscount = 0;
+            //https://stackoverflow.com/a/28575776
+            var exptimer;
+            $(document).keydown(function (event)
+            {
+                if (event.keyCode == 123 || (event.ctrlKey && event.shiftKey && event.keyCode == 73))
+                {
+                    if (++presscount > 2)
+                    {
+                        presscount = 0;
+                        clearInterval(exptimer);
+                        currentwindow.toggleDevTools();
+                    }
+                    else
+                    {
+                        if (exptimer)
+                            clearTimeout(exptimer);
+                        exptimer = setTimeout(function ()
+                        {
+                            presscount = 0;
+                        }, 500);
+                    }
+                }
+            });
+        }
+
+
+        window.addEventListener("load", function ()
+        {
+
+            //https://stackoverflow.com/a/18120786
+            Element.prototype.remove = function ()
+            {
+                this.parentElement.removeChild(this);
+            }
+            NodeList.prototype.remove = HTMLCollection.prototype.remove = function ()
+            {
+                for (var i = this.length - 1; i >= 0; i--)
+                {
+                    if (this[i] && this[i].parentElement)
+                    {
+                        this[i].parentElement.removeChild(this[i]);
+                    }
+                }
+            }
+
+            currentwindow.on("resize", onresize);
+
+
+            //https://gist.github.com/louisameline/1213bb112c6cb12a98b2ab525dfb8b07
+            var wind = electron.remote.getCurrentWindow(),
+                mouseIsOn = function ()
+                {
+
+                    var systemMouseCoord = electron.screen.getCursorScreenPoint(),
+                        winCoord = wind.getPosition(),
+                        winSize = wind.getSize();
+                    var inwindow = !(systemMouseCoord.x < winCoord[0]
+                        || systemMouseCoord.x > winCoord[0] + winSize[0]
+                        || systemMouseCoord.y < winCoord[1]
+                        || systemMouseCoord.y > winCoord[1] + winSize[1]
+                    );
+                    if (inwindow && !currentwindow.isMinimized())
+                    {
+                        var xfromtopright = (winCoord[0] + winSize[0]) - systemMouseCoord.x;
+                        var yfromtopright = systemMouseCoord.y - (winCoord[1]);
+                        return xfromtopright > 150 && yfromtopright > 50 ? "window" : xfromtopright < 50 && yfromtopright < 50 ? "close" : xfromtopright < 100 && xfromtopright > 50 && yfromtopright < 50 ? "maximize" : xfromtopright < 150 && xfromtopright > 100 && yfromtopright < 50 ? "minimize" : false;
+                    }
+                    else
+                        return false;
+                };
+            wind.setMenu(null);
+            document.addEventListener('contextmenu', event => event.preventDefault());
+            var closebutton = document.getElementById("closebutton");
+            var maximizebutton = document.getElementById("maximizebutton");
+            var minimizebutton = document.getElementById("minimizebutton");
+            closebutton.addEventListener("click", function ()
+            {
+                currentwindow.close();
+            });
+            var maximized = false;
+            maximizebutton.addEventListener("click", function ()
+            {
+                maximized = !maximized;
+                !maximized ? currentwindow.unmaximize() : currentwindow.maximize();
+            });
+            minimizebutton.addEventListener("click", function ()
+            {
+                currentwindow.minimize();
+            });
+            var topbuttons = {
+                close: {
+                    is: false, should: false, toggle: function (tog)
+                    {
+                        if (tog)
+                        {
+                            closebutton.style.backgroundColor = "rgba(255,25,25,0.9)";
+                        }
+                        else
+                        {
+                            closebutton.style.backgroundColor = "rgba(255,255,255,0.7)";
+                        }
+                    }
+                }, maximize: {
+                    is: false, should: false, toggle: function (tog)
+                    {
+                        if (tog)
+                        {
+                            maximizebutton.style.backgroundColor = "rgba(220,220,220,0.9)";
+                        }
+                        else
+                        {
+                            maximizebutton.style.backgroundColor = "rgba(255,255,255,0.7)";
+                        }
+                    }
+                }, minimize: {
+                    is: false, should: false, toggle: function (tog)
+                    {
+                        if (tog)
+                        {
+                            minimizebutton.style.backgroundColor = "rgba(220,220,220,0.9)";
+                        }
+                        else
+                        {
+                            minimizebutton.style.backgroundColor = "rgba(255,255,255,0.7)";
+                        }
+                    }
+                }
+            };
+            var onapp = false;
+            var currentElement = null;
+            setInterval(function ()
+            {
+                var ison = mouseIsOn();
+                for (var key in topbuttons)
+                {
+                    var button = topbuttons[key];
+                    button.should = ison === key;
+                    if (button.should !== button.is && (!button.should || cursoronelectronwindow))
+                    {
+                        button.toggle(button.should);
+                        button.is = button.should;
+                    }
+                }
+            }, 60);
+        });
+    </script>
+</head>
+
+<body>
+    <div id="maincont">
+        <div style="width:100%;top:0px;height:8px;position:fixed;-webkit-app-region: none;"></div>
+        <header style="height:50px;width:100%;top:0px;left:0;position:fixed;" id="topbar">
+            <div style="height:50px;top:0px;left:0;width:calc(100% - 150px);position:absolute;-webkit-app-region: drag;-webkit-user-select: none;background-color:rgba(255,255,255,0.7);">
+                <img src="logoitemicon.png" style="height:40px;width:40px;top:50%;position:relative;transform:translateY(-50%);margin-left:10px;" />
+                <span style="font-size:1.2em;height:40px;width:40px;top:8px;position:relative;transform:translateY(-50%);margin-left:10px;">Diplayus</span>
+            </div>
+            <div style="width:50px;height:50px;right:100px;position:absolute;background-color:rgba(255,255,255,0.7);cursor:default;" id="minimizebutton">
+                <span style="font-size:1.5em;text-align:center;top:6px;width:100%;left:0;position:absolute;font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;font-smooth: never;-webkit-font-smoothing : none;filter: contrast(1);">
+                    &#x1f5d5;
+                </span>
+            </div>
+
+            <div style="width:50px;height:50px;right:50px;position:absolute;background-color:rgba(255,255,255,0.7);cursor:default;" id="maximizebutton">
+                <span style="font-size:1.5em;text-align:center;top:13%;width:100%;left:0;position:absolute;font-family:'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;font-smooth: never;-webkit-font-smoothing : none;filter: contrast(1);">
+                    &#x1f5d6;
+                </span>
+            </div>
+            <div style="width:50px;height:50px;right:0px;position:absolute;background-color:rgba(255,255,255,0.7);cursor:default;" id="closebutton">
+                <span style="text-align:center;top:25%;width:100%;left:0;position:absolute;font-family:'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif">
+                    &#x2715;
+                </span>
+            </div>
+        </header>
+        <div style="background-color:rgba(240,240,240,0.8);height:50px;top:50px;left:0px;width:100%;position:fixed;border-top: solid 1px rgba(128,128,128,0.15);" id="topbuttons">
+            <!--<div id="activate" class="topbutton backbutton" style="width:150px;height:100%;"><span id="activatetext" style="font-size:1.1em;text-align:center;position:absolute;top:50%;transform:translateY(-50%) translateX(-50%);left:50%;">Activated</span></div>-->
+            <div id="additembutton" title="Add Item" onclick="additem()" class="topbutton additembutton" style="width:60px;height:100%;float:right;opacity:1;display:block;"><span id="backtext" style="font-size:1.1em;text-align:center;top:0% !important;transform:translateY(-100%) translateX(-50%);left:50%;z-index:10;"><img src="icons/add.svg" style="height:100%;width:100%;opacity:0.7;transform:scale(0.6);" /></span></div>
+            <div id="globalsettingsbutton" title="Settings" onclick="globalsettings()" class="topbutton settingsbutton" style="width:60px;height:100%;float:right;right:0px;opacity:1;display:block;"><span id="backtext" style="font-size:1.1em;text-align:center;top:0% !important;transform:translateY(-100%) translateX(-50%);left:50%;z-index:10;"><img src="icons/settings.svg" style="height:100%;width:100%;opacity:0.7;transform:scale(0.6);" /></span></div>
+            <div id="managepluginsbutton" title="Manage Plugins" onclick="manageplugins()" class="topbutton" style="width:60px;height:100%;float:right;right:0px;opacity:1;display:block;"><span id="backtext" style="font-size:1.1em;text-align:center;top:0% !important;transform:translateY(-100%) translateX(-50%);left:50%;z-index:10;"><img src="icons/plugin.png" style="height:100%;width:100%;opacity:0.7;transform:scale(0.5,0.6);" /></span></div>
+            <div id="backbutton" onclick="backbutton()"  title="Back" class="topbutton backbutton" style="width:60px;height:100%;float:right;right:0px;"><span id="backtext" style="font-size:1.1em;text-align:center;top:0% !important;transform:translateY(-100%) translateX(-50%);left:50%;z-index:10;"><img src="icons/left.svg" style="height:100%;width:100%;opacity:0.7;transform:scale(0.6);" /></span></div>
+            <div id="settingsbutton" onclick="pluginsettings()"  title="Settings" class="topbutton settingsbutton" style="width:150px;height:100%;float:right;right:0px;opacity:0;display:none;"><span id="backtext" style="font-size:1.1em;text-align:center;position:absolute;top:50%;transform:translateY(-50%) translateX(-50%);left:50%;">Plugin Settings</span></div>
+        </div>
+        <div style="background-color:white;width:100%;height:calc(100% - 50px);top:100px;position:fixed;left:0;opacity:0;z-index:2;overflow-y:auto;display:none;"
+             id="addplugincont">
+            <span style="width:100%;text-align:right;position:absolute;top:10px;font-size:2em;opacity:1;font-family:Arial;float:right;right:30px;opacity:0.95;cursor:pointer;font-weight:100;" onclick="hideaddplugin(event);">X</span>
+            <div style="left:50%;transform:translateX(-50%) translateY(-50%);top:50%;position:absolute;top:50%;border:dashed 2px black;width:80%;height:80%;opacity:0.6;cursor:pointer;" onclick="choosedus();" id="plugindropz">
+                <span style="width:100%;text-align:center;position:absolute;top:42%;font-size:2em;opacity:1;color:black;">Drop .dus file here<br /><small style="font-size:0.5em;opacity:1;color:black;">Or click to choose file</small></span>
+            </div>
+        </div>
+        <div style="box-shadow:inset 0 0 10px rgba(0,0,0,0.5);position:fixed;top:100px;height:calc(100% - 100px);width:calc(100% - 10px);transition:height 0.3s;" id="allitemsparentcontainer">
+            <div style="width:100%;height:100%;position:relative;top:0;left:0;text-align:center;" id="noitem"><span style="top: 50%;color: rgba(0,0,0,0.6);position: relative;text-shadow: rgba(255,255,255,0.67) 0px 0px 5px;">Looks like you have no item added, click add button in top bar to add some items.</span></div>
+            <div style="width:100%;height:calc(100% - 100px);top:100px;position:fixed;left:0;opacity:0;z-index:-1;overflow-y:auto;transition:height 0.3s,opacity 0.25s;" id="pluginscontainer"
+                 class="cardcont">
+                <div class="card-columns" id="plugincards" style="padding-bottom:200px;">
+                </div>
+            </div>
+            <div style="width:100%;height:calc(100% - 100px);top:100px;position:fixed;left:0;opacity:1;z-index:1;overflow-y:auto;padding-bottom:200px;transition:height 0.3s, opacity 0.25s;"
+                 id="itemscontainer" class="cardcont">
+                <div class="card-columns" id="itemcards">
+                </div>
+            </div>
+        </div>
+        <div style="background-color:rgba(255,255,255,0.5);width:100%;height:30px;top:100%;transition:all 0.3s;position:fixed;border:0.1px solid rgba(0,0,0,0.1);" id="currentjobbar">
+            <div id="jobprogressbar">
+                <div id="jobprogressinnerbar" class="progress-bar progress-bar-striped" role="progressbar"></div>
+            </div>
+            <span style="float:right;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;font-size:12px;position: relative;bottom: 9.5px;right: 10px;" id="currentjobtext">
+                job
+            </span>
+        </div>
+    </div>
+    <div id="prevcont" style="background-color:yellow;display:none;opacity:0;top:5px;left:0px;width:calc(100% - 10px);height:calc(100% - 5px);border-left:solid 0.5px rgba(0,0,0,0.1);" onclick="">
+
+
+    </div>
+</body>
+
+</html>

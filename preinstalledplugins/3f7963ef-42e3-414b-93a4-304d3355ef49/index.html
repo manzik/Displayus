@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script>
+        let request = require("request"), fs = require("fs");
+        let db;
+        if (!fs.existsSync(__dirname + "\\db\\"))
+            fs.mkdirSync(__dirname + "\\db\\");
+        if (!fs.existsSync(__dirname + "\\images\\"))
+            fs.mkdirSync(__dirname + "\\images\\");
+        fs.readFile(__dirname + "\\db\\main.json", (err, res) =>
+        {
+            if (!err)
+                db = JSON.parse(res);
+            else
+            {
+                db = { alreadysaw: [], current: { date: 0 } }
+                fs.writeFileSync(__dirname + "\\db\\main.json", JSON.stringify(db));
+            }
+            loaded();
+        });
+        function savedb()
+        {
+            fs.writeFile(__dirname + "\\db\\main.json", JSON.stringify(db));
+        }
+        function getday(str)
+        {
+            return ((new Date(str.substring(0, 4) + "-" + str.substring(6, 4) + "-" + str.substring(6, 8))).getTime()) / (1000 * 60 * 60 * 24)
+        }
+        //https://stackoverflow.com/a/30003234
+        var download = function (uri, filename, callback)
+        {
+            request.head(uri, function (err, res, body)
+            {
+                if (err) callback(err, filename);
+                else
+                {
+                    var stream = request(uri);
+                    stream.pipe(
+                        fs.createWriteStream(filename)
+                            .on('error', function (err)
+                            {
+                                callback(err, filename);
+                                stream.read();
+                            })
+                    )
+                        .on('close', function ()
+                        {
+                            callback(null, filename);
+                        });
+                }
+            });
+        };
+        function loaded()
+        {
+            var img = document.getElementById("bg");
+            if (img.src === undefined || img.src.length == 0)
+            {
+                var img = document.getElementById("bg");
+                img.src = __dirname + "\\images\\" + db.current.date + ".jpg";
+            }
+            function checkbingimagesfornew()
+            {
+
+                request.get({
+                    url: "http://www.bing.com/HPImageArchive.aspx?format=js&idx=2&n=1&mkt=en-US"
+                }, (err, res, body) =>
+                    {
+                    var nowday = (Date.now() / (1000 * 60 * 60 * 24)) << 0;
+                    console.log(err, body);
+                    if (err || res.statusCode != 200)
+                            return;
+                        var image = JSON.parse(body).images[0];
+                        var isnew = !db.current.date || getday(image.startdate) > db.current.date;
+                        if (isnew)
+                        {
+                            download("http://www.bing.com" + image.url, __dirname + "\\images\\" + getday(image.startdate) + ".jpg", (err, path) =>
+                            {
+                                if (err || res.statusCode != 200)
+                                {
+                                    console.log(err, res.statusCode);
+                                }
+                                else
+                                {
+                                    db.current.date = getday(image.startdate);
+                                    db.alreadysaw.push(getday(image.startdate));
+                                    var img = document.getElementById("bg");
+                                    if (img.src !== path)
+                                        img.src = path;
+                                    savedb();
+                                }
+                            })
+
+                        }
+                    })
+                return this;
+            }
+            setInterval(checkbingimagesfornew(), 1000 * 60 * 1);
+        }
+    </script>
+</head>
+<body>
+    <img style="width:100%;height:100%;position:fixed;left:0;top:0;" id="bg" />
+</body>
+</html>

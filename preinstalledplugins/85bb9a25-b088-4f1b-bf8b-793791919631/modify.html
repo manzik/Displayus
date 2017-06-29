@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link href="css/flat-ui.min.css" rel="stylesheet" />
+    <link href="css/tag-basic-style.css" rel="stylesheet" />
+    <link href="css/screen.css" rel="stylesheet" />
+    <script>
+        $ = require("./js/jquery-3.1.1.min.js");
+        jQuery = $;
+    </script>
+    <script src="js/tagging.js"></script>
+<style>
+    #keywords
+    {
+        background-color:white;
+    }
+    .tag > span
+    {
+        margin:0px !important;
+    }
+    .tag > a {
+       top:0.6em !important;
+       right:8px !important;
+    }
+    .tag {
+        padding: 0px 30px 0px 0px !important;
+    }
+</style>
+    <script>
+        
+        var globitem;
+        var keywordsel;
+        function done()
+        {
+            globitem.data.interval = parseFloat(document.getElementById("interval").value) * 60 * 1000;
+            globitem.data.keywords = $(keywordsel).tagging("getTags");
+            displayus.done(globitem);
+        }
+        window.addEventListener("load", () =>
+        {
+            keywordsel = document.getElementById("keywords");
+
+            displayus.addEventListener("load", () =>
+            {
+                displayus.getItem((item) =>
+                {
+                    globitem = item;
+                    $(keywordsel).tagging();
+                    $(keywordsel).tagging("add", item.data.keywords);
+                    document.getElementById("interval").value = item.data.interval / 60 / 1000;
+                });
+            });
+            
+        });
+    </script>
+</head>
+<body style="background-color:rgba(255,255,255,0.3)">
+    <b>Change Interval: </b><br/><input type="text" style="height:25px;" placeholder="URL" class="form-control" id="interval" />
+    <br/><br /><b>KeyWords: </b>
+    <div id="keywords"></div><br/><br />
+    <button class="btn btn-block btn-lg btn-primary" onclick="done()" id="clickbutton">Done</button>
+    <button class="btn btn-block btn-lg btn-danger" onclick="displayus.cancel()">Cancel</button>
+</body>
+</html>

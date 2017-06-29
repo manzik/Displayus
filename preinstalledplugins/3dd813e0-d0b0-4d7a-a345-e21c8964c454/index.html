@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script>
+        $ = require("./js/jquery-3.1.1.min.js")
+    </script>
+    <link rel="stylesheet" href="css/main.css" />
+    <script src="js/videocontrol.js"></script>
+    <script>
+        window.onerror = function (a, b, c) { $("#p").html(a + b + c); };
+        var fs = require("fs");
+        function videoloaded(e)
+        {
+            vidw = this.videoWidth;
+            vidh = this.videoHeight;
+
+            document.getElementById("video").height = Math.min(parseFloat(vidh), innerHeight);
+            document.getElementById("video").width = Math.min(parseFloat(vidw), innerWidth);
+            setelementfit(document.getElementById("video"), currentitem.data.fitmode);
+            document.getElementById("video").play();
+        }
+        var currentitem;
+        window.addEventListener("load", function ()
+        {
+
+            console.log("loaded");
+            displayus.registernClick(togglecontrol, 2, 300);
+            displayus.addEventListener("itemchange", function (opts)
+            {
+
+                item = opts.item;
+                console.log(item, currentitem);
+                if (!item.data.path)
+                {
+                    document.getElementById("firstaddcontainer").style.display = "block";
+                    document.getElementById("maincontainer").style.display = "none";
+                    return;
+                }
+                else
+                    if (document.getElementById("maincontainer").style.display == "none")
+                    {
+                        document.getElementById("firstaddcontainer").style.display = "none";
+                        document.getElementById("maincontainer").style.display = "block";
+                    }
+                if (currentitem && item.data.path === currentitem.data.path)
+                {
+                    if (item.data.fitmode !== currentitem.data.fitmode)
+                    {
+                        console.log(item.data.fitmode);
+                        setelementfit(document.getElementById("video"), item.data.fitmode);
+                        setelementfit(document.getElementById("img"), item.data.fitmode);
+                    }
+                    currentitem = item;
+                }
+                else
+                {
+                    currentitem = item;
+                    showitem(item);
+                }
+            });
+            document.getElementById("control").addEventListener("mouseover", function () { if (hidecontroltimeout) clearTimeout(hidecontroltimeout); });
+            document.getElementById("control").addEventListener("mouseout", function () { hidecontroltimeout = setTimeout(hidecontrol, hidecontroltime); });
+            displayus.getItem(function (item)
+            {
+                if (!item)
+                {
+                    document.getElementById("firstaddcontainer").style.display = "block";
+                    document.getElementById("maincontainer").style.display = "none";
+                }
+                currentitem = item;
+                document.getElementById("video").addEventListener("loadedmetadata", videoloaded);;
+                document.getElementById("video").addEventListener('error', function () { showsuccess = false; });
+                document.getElementById("img").addEventListener('error', function () { showsuccess = false; });
+
+                displayus.addEventListener("desktopiconschange", function (data)
+                {
+                    if (showingcontrol)
+                    {
+                        showcontrol(data);
+                    }
+                });
+                if (item)
+                    showitem(item);
+
+            });
+
+        });
+        function showitem(item)
+        {
+            var path = item.data.path;
+            var filename = path.split("\\")[path.split("\\").length - 1];
+            type = path.split(".")[path.split(".").length - 1];
+            var formats = { imageformats: { types: ["png", "gif", "jpg", "bmp", "webp"], func: showimg }, videoformats: { types: ["mkv", "mp4", "m4v", "m4a", "mp3", "ogv", "ogm", "ogg", "oga", "webm", "wav", "amr", "avi", "flac", "3gp"], func: showvid } };
+            type = type.toLowerCase();
+            for (var key in formats)
+            {
+                var arr_types = formats[key].types;
+                var func = formats[key].func;
+                for (var i = 0; i < arr_types.length; i++)
+                {
+                    if (arr_types[i] == type)
+                    {
+                        func(path, type, item.fitmode);
+                        break;
+                    }
+                }
+            }
+
+        }
+        var showsuccess = true;
+
+        function showimg(path, type, fitmode)
+        {
+            showingtype = "img";
+            hidecontrol();
+            try
+            {
+                document.getElementById("img").style.display = "block";
+                document.getElementById("video").pause();
+                document.getElementById("video").style.display = "none";
+                setTimeout(function ()
+                {
+                    document.getElementById("img").onload = function ()
+                    {
+                        document.getElementById("img").height = Math.min(parseFloat(this.naturalHeight), innerHeight);
+                        document.getElementById("img").width = Math.min(parseFloat(this.naturalWidth), innerWidth);
+                        setelementfit(this, fitmode);
+                    };
+                    document.getElementById("img").src = path;
+                }, 0)
+
+
+            }
+            catch (e) { showsuccess = false; }
+        }
+        function showvid(path, type)
+        {
+            showingtype = "vid";
+            try
+            {
+                document.getElementById("video").style.display = "block";
+                document.getElementById("img").style.display = "none";
+                document.getElementById("video").pause();
+
+                document.getElementById("video").innerHTML = "<source src=\"file:///" + path + "\" " + (type == "mkv" ? "type = 'video/webm'" : "type=\"video/" + type + "\"") + ">";
+                var vidw, vidh;
+                document.getElementById("video").load();
+                document.getElementById("video").play();
+            }
+            catch (e) { showsuccess = false; }
+        }
+        function setelementfit(elem, itemfitmode)
+        {
+            fs.readFile(__dirname + "/database.json", function (err, data)
+            {
+                if (!err)
+                {
+                    database = JSON.parse(data);
+                    switch (itemfitmode || database.settings.fitmode.value)
+                    {
+                        case "0":
+                            var maxval = Math.max(innerHeight / parseFloat(elem.height), innerWidth / parseFloat(elem.width))
+                            elem.style.transform = "translateX(-50%) translateY(-50%) scale(" + maxval + ")";
+                            break;
+                        case "1":
+                            var maxval = Math.min(innerHeight / parseFloat(elem.height), innerWidth / parseFloat(elem.width))
+                            elem.style.transform = "translateX(-50%) translateY(-50%) scale(" + maxval + ")";
+                            break;
+                        case "2":
+                            elem.style.transform = "translateX(-50%) translateY(-50%) scaleY(" + innerHeight / parseFloat(elem.height) + ") scaleX(" + innerWidth / parseFloat(elem.width) + ")";
+                            break;
+                        case "3":
+                            elem.style.transform = "translateX(-50%) translateY(-50%)";
+                            break;
+                    }
+                }
+            });
+
+        }
+    </script>
+</head>
+
+<body style="background-color: white;">
+    <div id="firstaddcontainer" style="background-color:rgb(108, 108, 108);display:none;">
+        <span style="color:rgb(164, 164, 164);text-shadow:0px 0px 10px rgba(255,255,2550,0.7);">Please choose a media file from panel</span>
+    </div>
+    <div id="maincontainer">
+        <img id="img" style="left:50%;top:50%;transform:translateX(-50%) translateY(-50%);position:fixed;background-color: white;" />
+        <video loop id="video" controls preload="auto" style="left:50%;top:50%;transform:translateX(-50%) translateY(-50%);position:fixed;background-color: white;"></video>
+        <p id="p" style="position:fixed;left:0;top:0;width:100%;height:100%;"></p>
+        <div id="control" style="display:none;position:fixed;background-color:black;transition:all 0.4s;opacity:0;">
+            <div class="control">
+                <div class="btmControl">
+                    <!--http://codepen.io/mistkaes/pen/WvPrJL-->
+                    <div class="btnPlay btn" title="Play/Pause video">
+                        <button class="ytp-play-button ytp-button" aria-live="assertive" tabindex="32" aria-label="Pause">
+                            <svg width="100%" height="100%" viewBox="0 0 36 36" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+                                <defs>
+                                    <path id="ytp-12" d="M 11 10 L 17 10 L 17 26 L 11 26 M 20 10 L 26 10 L 26 26 L 20 26">
+                                        <animate id="animation" begin="indefinite" attributeType="XML" attributeName="d" fill="freeze" from="M11,10 L17,10 17,26 11,26 M20,10 L26,10 26,26 20,26" to="M11,10 L18,13.74 18,22.28 11,26 M18,13.74 L26,18 26,18 18,22.28" dur="0.1s" keySplines=".4 0 1 1"
+                                                 repeatCount="1"></animate>
+                                    </path>
+                                </defs>
+                                <use xlink:href="#ytp-12" class="ytp-svg-shadow"></use>
+                                <use xlink:href="#ytp-12" class="ytp-svg-fill"></use>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress">
+                            <span class="bufferBar"></span>
+                            <span class="timeBar"></span>
+                        </div>
+                    </div>
+                    <div class="sound sound2 btn" id="mutebutton" title="Mute/Unmute sound">
+                        <svg class="icon-sound" version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+                             x="0px" y="0px" viewBox="0 0 512 512" enable-background="new 0 0 512 512" xml:space="preserve">
+                        <g>
+                        <path fill="white" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" d=" M319.396,47.722l-145.663,145.67H32.735c-13.099,0-23.719,10.621-23.719,23.719v63.746c0,13.094,10.621,23.726,23.719,23.726 h141.002l145.658,145.665V47.722z" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        <path d="M422.602,445.544c-3.034,0-6.069-1.158-8.385-3.475c-4.633-4.633-4.633-12.138,0-16.77 c94.785-94.786,94.785-249.032,0-343.834c-4.633-4.633-4.633-12.138,0-16.771c4.632-4.633,12.137-4.633,16.77,0 c104.039,104.051,104.039,273.335,0,377.375C428.671,444.386,425.636,445.544,422.602,445.544z" /> </g>
+                    </svg>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        <p id="p"></p>
+        <!--<button id="button" style="position:fixed;"></button> !-->
+    </div>
+</body>
+
+</html>

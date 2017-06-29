@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link href="css/flat-ui.min.css" rel="stylesheet" />
+    <style>
+        input,
+        button {
+            margin: 10px;
+        }
+
+        body {
+            padding: 20px;
+        }
+
+        table {
+            border-radius: 5px;
+        }
+
+        tr {
+            border-bottom: #888 solid;
+            background-color: rgb(200, 200, 200);
+            transition: all 0.3s;
+        }
+
+            tr:hover {
+                border-bottom: #888 solid;
+                background-color: rgb(100, 100, 100);
+            }
+
+        #filepath {
+            text-shadow: 0px 0px 10px rgba(255,255,255,0.8);
+            color: black;
+        }
+    </style>
+    <script>
+        function addfile()
+        {
+            require('electron').remote.dialog.showOpenDialog({ title: "Displayus Media Plugin", buttonLabel: "Select", properties: ["openFile"] }, function (filepath)
+            {
+                arr_files = [];
+                filepath.forEach(function (a) { arr_files.push(a); })
+                reloadfilelist();
+            });
+        }
+        arr_files = [];
+        function reloadfilelist()
+        {
+            var table = document.getElementById("table");
+            table.innerHTML = "";
+            arr_files.forEach(function (a)
+            {
+                table.innerHTML += "<tr><td>" + a + "</td></tr>";
+            });
+
+        }
+        var fs = require("fs");
+        function add()
+        {
+            var pending = 0;
+            pending += arr_files.length;
+            arr_files.forEach(function (a)
+            {
+                rendermedia(a, function (img)
+                {
+                    console.log(img);
+                    displayus.addItem({ label: a.split("\\")[a.split("\\").length - 1], icon: img, data: { path: a } }, function ()
+                    {
+                        console.log(pending);
+                        if (--pending == 0)
+                            displayus.close();
+                    });
+                });
+
+            });
+
+        }
+        function rendermedia(path, cb)
+        {
+            var filename = path.split("\\")[path.split("\\").length - 1];
+            type = path.split(".")[path.split(".").length - 1];
+            var formats = { imageformats: { types: ["png", "gif", "jpg", "bmp", "webp"], func: renderimg }, videoformats: { types: ["mkv", "mp4", "m4v", "m4a", "mp3", "ogv", "ogm", "ogg", "oga", "webm", "wav", "amr", "avi", "flac", "3gp"], func: rendervid } };
+            type = type.toLowerCase();
+            for (var key in formats)
+            {
+                var arr_types = formats[key].types;
+                var func = formats[key].func;
+                for (var i = 0; i < arr_types.length; i++)
+                {
+                    if (arr_types[i] == type)
+                    {
+                        func(path, type, cb);
+                        break;
+                    }
+                }
+            }
+        }
+        var canvasBuffer = require('./electron-canvas-to-buffer.js')
+        function rendervid(path, type, cb)
+        {
+            var c = document.createElement("canvas");
+            c.height = 500;
+            c.width = 500;
+            var ctx = c.getContext("2d");
+            var vid = document.createElement("video");
+            vid.innerHTML = "<source src=\"file:///" + path + "\" " + (type == "mkv" ? "type = 'video/webm'" : "type=\"video/" + type + "\"") + ">";
+
+            vid.addEventListener("loadedmetadata", function (e)
+            {
+                vidw = this.videoWidth;
+                vidh = this.videoHeight;
+                vid.currentTime = vid.duration * (Math.random() * 0.8 + 0.1);
+                vid.addEventListener("loadeddata", function ()
+                {
+                    vid.play();
+                    var renderw, renderh;
+                    if (vidw > vidh)
+                    {
+                        renderh = c.height;
+                        renderw = 1 / (vidh / renderh) * vidw;
+                    }
+                    else
+                    {
+                        renderw = c.width;
+                        renderh = 1 / (vidw / renderw) * vidh;
+                    }
+
+                    ctx.drawImage(vid, -(renderw - c.width) / 2, -(renderh - c.height) / 2, renderw, renderh);
+                    var buffer = canvasBuffer(c, 'image/png')
+
+                    // write canvas to file
+                    var writepath = __dirname + "/tmp/" + Math.random() * Math.pow(10, 16) + ".png";
+                    fs.writeFile(writepath, buffer, function (err)
+                    {
+                        if (err) console.log(err);
+                        else
+                            cb(writepath);
+                    });
+                    vid.pause();
+                });
+
+
+            });
+        }
+        function renderimg(path, type, cb)
+        {
+            var c = document.createElement("canvas");
+            c.height = 500;
+            c.width = 500;
+            var ctx = c.getContext("2d");
+            var img = new Image();
+            img.src = path;
+            img.onload = function ()
+            {
+                var renderw, renderh;
+                if (img.width > img.height)
+                {
+                    renderh = c.height;
+                    renderw = 1 / (img.height / renderh) * img.width;
+                }
+                else
+                {
+                    renderw = c.width;
+                    renderh = 1 / (img.width / renderw) * img.height;
+                }
+
+                ctx.drawImage(img, -(renderw - c.width) / 2, -(renderh - c.height) / 2, renderw, renderh);
+                var buffer = canvasBuffer(c, 'image/png')
+
+                // write canvas to file
+                var writepath = __dirname + "/tmp/" + Math.random() * Math.pow(10, 16) + ".png";
+                fs.writeFile(writepath, buffer, function (err)
+                {
+                    if (err) console.log(err);
+                    else
+                        cb(writepath);
+                })
+            };
+
+        }
+        var editfilepath;
+        function editfile()
+        {
+            require('electron').remote.dialog.showOpenDialog({ title: "Displayus Media Plugin", buttonLabel: "Select", properties: ["openFile"] }, function (filepath)
+            {
+                console.log(filepath);
+                var a = filepath[0];
+                var pathname = document.getElementById("filepath");
+                var arr_path = a.split("/").join("\\").split("\\");
+                pathname.innerHTML = arr_path[arr_path.length - 1];
+                editfilepath = a;
+                displayus.itemchange({ data: { path: a }, id: edititemid });
+
+            });
+        }
+        var edititemid, obj_edititem;
+        function edit()
+        {
+            function senditem(icon)
+            {
+                var label = editfilepath.split("\\")[editfilepath.split("\\").length - 1];
+                obj_edititem.label = label;
+                obj_edititem.data = obj_edititem.data || {};
+                obj_edititem.data.path = editfilepath;
+                obj_edititem.icon = icon;
+                obj_edititem.id = edititemid;
+                obj_edititem.data.fitmode = document.getElementById("fitselect").value;
+                displayus.done(obj_edititem);
+            }
+            if (!itemprev || editfilepath != itemprev.data.path)
+                rendermedia(editfilepath, senditem);
+            else
+                senditem(itemprev.icon);
+        }
+        var itemprev, modifytype;
+        window.addEventListener("load", function ()
+        {
+
+            displayus.addEventListener("load", function ()
+            {
+
+                displayus.getItem(function (item)
+                {
+                    modifytype = displayus.type;
+                    itemprev = item;
+
+                    editfilepath = item && item.data.path || "";
+
+                    var database = require("./database.json");
+                    document.getElementById("fitselect").value = item && item.data.fitmode || database.settings.fitmode.value;
+                    $(".select2-chosen").html($("#fitselect option[value='" + (item && item.data.fitmode || database.settings.fitmode.value) + "']").text());
+                    $(".select2-choice").css("width", "200px");
+
+                    obj_edititem = item || {};
+                    edititemid = item && item.id || "";
+
+                    var pathname = document.getElementById("filepath");
+                    var arr_path = item && item.data.path.split("/").join("\\").split("\\") || "";
+                    pathname.innerHTML = arr_path && arr_path[arr_path.length - 1] || "";
+
+                    $("#fitselect").on("change", function ()
+                    {
+                        displayus.itemchange({ data: { path: editfilepath, fitmode: document.getElementById("fitselect").value }, id: edititemid });
+                    });
+                });
+            });
+
+        })
+    </script>
+</head>
+
+<body style="width:100%;position:fixed;left:0;top:0;background-color:rgba(0,0,0,0);">
+    <button class="btn btn-block btn-lg btn-primary" onclick="editfile()">Choose File</button><span id="filepath"></span><br /><button class="btn btn-block btn-lg btn-primary" onclick="edit()">Done</button><button class="btn btn-block btn-lg btn-danger" onclick="displayus.cancel()">Cancel</button>
+    <br /><b style="font-size:18px;line-height:5px;">Fit : &nbsp;&nbsp;&nbsp; </b><br />
+    <select class="form-control select select-info mrs mbm" data-toggle="select" id="fitselect" style="width:100px !important;">
+        <option value="0">Fill</option>
+        <option value="1">Fit</option>
+        <option value="2">Scretch</option>
+        <option value="3">Center</option>
+    </select>
+    <br />
+    <script>jQuery = $ = require("./js/jquery-3.1.1.min.js");</script>
+    <script src="js/flat-ui.min.js"></script>
+    <script>require("./js/application.js");</script>
+</body>
+
+</html>

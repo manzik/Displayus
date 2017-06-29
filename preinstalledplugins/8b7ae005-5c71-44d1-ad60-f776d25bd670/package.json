@@ -1,0 +1,9 @@
+{
+  "name": "webpage",
+  "title": "Web Page",
+  "author": "Manzik <u3fian@gmail.com>",
+  "preview": "icon.png",
+  "apptype": "js",
+  "version": "0.1.0",
+  "description": "Show web page url as wallpaper"
+}

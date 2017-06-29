@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script>
+function add()
+{
+  var url=document.getElementById("url").value;
+  displayus.add({label:url.substr(0,7)=="http://"||url.substr(0,8)=="https://"?url:"http://"+url,description:"",data:{url:url.substr(0,7)=="http://"||url.substr(0,8)=="https://"?url:"http://"+url}},function(){displayus.close();});
+  
+}
+window.addEventListener("load",function(){
+return;
+	displayus.addEventListener("load",function(){
+		console.log(2);
+		if(displayus.type=="edit")
+{
+		 displayus.getItem(function(item){
+		 	console.log(item);
+document.getElementById("url").innerHTML=item.url;
+})
+
+}
+	})
+ 
+})
+
+</script>
+</head>
+<body>
+<h1>Info</h1>
+</body>
+</html>

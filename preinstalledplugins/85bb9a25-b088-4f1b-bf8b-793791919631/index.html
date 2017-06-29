@@ -1,0 +1,288 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Hello World!</title>
+    <script>
+        var fs = require("fs"), request = require("request"), path = require("path");
+        if (!fs.existsSync(__dirname + "\\images\\"))
+            fs.mkdirSync(__dirname + "\\images\\");
+        if (fs.existsSync(__dirname + "\\db.json"))
+            var db = JSON.parse(fs.readFileSync(__dirname + "\\db.json"));
+        else
+        {
+            db = { alreadysaw: [] };
+            fs.writeFileSync(__dirname + "\\db.json", JSON.stringify(db));
+        }
+        function resetall()
+        {
+            db.alreadysaw = [];
+            savedb();
+        }
+        function unsplashgetresultbykeypage(key, page, cb)
+        {
+            request("https://unsplash.com/search/" + key + "&page=" + page + "", (req, res, body) =>
+            {
+                var codestart = body.indexOf("<script>") + "<script>".length;
+                for (var i = 0; i < 4; i++)
+                    codestart = body.indexOf("<script>", codestart) + "<script>".length;
+                var codeend = body.indexOf("</" + "script>", codestart);
+                var code = body.substring(codestart, codeend);
+                code = code.substring(code.indexOf("{"));
+                code = code.substring(0, code.length - 1);
+                code = JSON.parse(code);
+                var photos = code.entities.photos;
+                cb({ imgs: Object.keys(photos).map((x) => { return { id: "unsplash" + x, url: photos[x].urls.full } }) })
+            });
+        }
+        function redditgetresultbykeypage(key, page, cb)
+        {
+            request("https://www.reddit.com/r/wallpapers/search.json?q=" + key + "&count=" + (page - 1) * 100 + "&limit=100&&restrict_sr=on", (req, res, body) =>
+            {
+                body = JSON.parse(body);
+                body = {
+                    imgs: body.data.children.map((x) => { x = x.data; return { id: "sr" + x.id, url: x.url }; })
+                };
+                cb(body);
+            });
+        }
+        function wallpaperswidegetresultbykeypage(key, page, cb)
+        {
+            request("http://wallpaperswide.com/search/page/" + page + "?q=" + key, (req, res, body) =>
+            {
+                var result = body.split("<div class=\"thumb\">").slice(1).map((x) => { var start = x.indexOf("<a href=\"") + ("<a href=\"").length; x = x.substring(start + 1, x.indexOf(" title=", start) - 1); return x.substring(0, x.indexOf("-")); });
+                result = { imgs: result.map((img) => { return { id: "ww" + img, realid: img }; }) };
+                cb(result);
+            });
+        }
+        var getimgsources = {
+            unsplash: {
+                mainaddress:"unsplash.com",
+                getbykeypage: unsplashgetresultbykeypage, objtourl: (obj, cb) =>
+                {
+                    cb(obj.url);
+                }
+            }, wallpaperswide: {
+                mainaddress: "wallpaperside.com",
+                getbykeypage: wallpaperswidegetresultbykeypage, objtourl: (obj, cb) =>
+                {
+                    cb("http://wallpaperswide.com/download/" + obj.realid + "-1920x1080.html")
+                }
+            },
+            reddit: {
+                mainaddress: "reddit.com",
+                getbykeypage: redditgetresultbykeypage, objtourl: (obj, cb) =>
+                {
+                    cb(obj.url);
+                }
+            }
+
+        };
+        function getimgfromsource(source, keyword, cb)
+        {
+            function checknextpage(page)
+            {
+                source.getbykeypage(keyword, String(page + 1), (results) =>
+                {
+                    var imgs = results.imgs;
+                    var foundit = false;
+                    imgs.forEach((img) =>
+                    {
+                        if (!foundit && db.alreadysaw.indexOf(img.id) < 1)
+                        {
+                            source.objtourl(img, (url) => { img.url = url; cb({ img: img }); });
+                            foundit = true;
+                            return false;
+                        }
+                    });
+                    if (!foundit)
+                        checknextpage(++page);
+                });
+            }
+            checknextpage(0);
+        }
+        
+        function getimageurl(cb)
+        {
+            var triedsources = [];
+            var sources = Object.keys(getimgsources);
+            var source = sources[Math.floor(Math.random() * sources.length)];
+            triedsources.push(source);
+            var source = getimgsources[source];
+            var keyword = keywords[Math.floor(Math.random() * keywords.length)];
+            checksite(source.mainaddress, (isup) =>
+            {
+                if (isup)
+                {
+                    getimgfromsource(source, keyword, (data) => { cb(data); });
+                }
+                else
+                    getimageurl(cb);
+            })
+            
+
+        }
+        var filecountlimit = 20;
+        function savedb()
+        {
+            fs.writeFile(__dirname + "\\db.json", JSON.stringify(db), () =>
+            {
+                //https://stackoverflow.com/a/23022459
+                fs.readdir(__dirname + "\\images\\", function (err, files)
+                {
+                    if (err)
+                        return;
+                    var arr_files = [], leftcount = 0;
+                    leftcount = files.length;
+                    if (leftcount < filecountlimit)
+                        return;
+                    files.forEach(function (file, index)
+                    {
+
+                        fs.stat(path.join(__dirname + "\\images\\", file), function (err, stat)
+                        {
+                            leftcount--;
+                            if (err)
+                            {
+                                console.error(err);
+                                return;
+                            }
+                            arr_files.push({ time: new Date(stat.ctime).getTime(), file: file });
+                            if (leftcount === 0)
+                            {
+                                arr_files.sort((a, b) => { return b.time - a.time; });
+                                arr_files.forEach((file, i) =>
+                                {
+                                    if (i > filecountlimit)
+                                    {
+
+                                        fs.unlink(path.join(__dirname + "\\images\\", file.file), () => { });
+                                    }
+                                });
+                            }
+                        });
+                    });
+                });
+            });
+        }
+        function checksite(address,cb)
+        {
+            var http = require("http");
+            http.get("http://" + address, function (res)
+            {
+                cb(true);
+            }).on('error', function (e)
+            {
+                cb(false);
+            });
+        }
+        function changewallpaper()
+        {
+            getimageurl((res) =>
+            {
+                var img = res.img;
+                download(img.url, __dirname + "\\images\\" + img.id, (err, filename) =>
+                {
+                    if (!err)
+                    {
+
+
+
+                        document.querySelector("img").src = filename;
+                        db.alreadysaw.push(img.id);
+                        db.currentimg = __dirname + "\\images\\" + img.id;
+                        savedb();
+                    }
+                    else
+                        console.error(err);
+                });
+            });
+        }
+
+
+        //https://stackoverflow.com/a/30003234
+        var download = function (uri, filename, callback)
+        {
+            request.head(uri, function (err, res, body)
+            {
+                if (err) callback(err, filename);
+                else
+                {
+                    var stream = request(uri);
+                    stream.pipe(
+                        fs.createWriteStream(filename)
+                            .on('error', function (err)
+                            {
+                                callback(error, filename);
+                                stream.read();
+                            })
+                    )
+                        .on('close', function ()
+                        {
+                            callback(null, filename);
+                        });
+                }
+            });
+        };
+        function urlencode(str)
+        {
+            str = (str + '')
+                .toString();
+
+            // Tilde should be allowed unescaped in future versions of PHP (as reflected below), but if you want to reflect current
+            // PHP behavior, you would need to add ".replace(/~/g, '%7E');" to the following.
+            return encodeURIComponent(str)
+                .replace(/!/g, '%21')
+                .replace(/'/g, '%27')
+                .replace(/\(/g, '%28')
+                .
+                replace(/\)/g, '%29')
+                .replace(/\*/g, '%2A')
+                .replace("%20","+")
+        }
+        function setkeywords(_keywords)
+        {
+            keywords = _keywords.map(urlencode);
+        }
+        var globinterval;
+        function setinterval(time)
+        {
+            if (globinterval)
+                clearInterval(globinterval);
+            globinterval=setInterval(changewallpaper, time);
+        }
+        window.addEventListener("load", () =>
+        {
+            displayus.getItem((item) =>
+            {
+                displayus.addEventListener("itemchange", function (arg)
+                {
+                    setkeywords(arg.item.data.keywords);
+                    setinterval(arg.item.data.interval);
+                    changewallpaper();
+                });
+                setkeywords(item.data.keywords);
+                displayus.registernClick((eventdata) =>
+                {
+                    console.log(eventdata);
+                    if (eventdata.ondesktop && !eventdata.cursoriconpointing.onicon)
+                        changewallpaper();
+                }, 3, 300);
+                if (db.currentimg)
+                {
+                    document.querySelector("img").src = db.currentimg;
+                }
+                else
+                changewallpaper();
+                savedb();
+                setinterval(item.data.interval);
+            });
+
+        });
+
+    </script>
+</head>
+<body>
+    <img src="" style="width:100%;height:100%;position:fixed;left:0;top:0;" />
+</body>
+</html>

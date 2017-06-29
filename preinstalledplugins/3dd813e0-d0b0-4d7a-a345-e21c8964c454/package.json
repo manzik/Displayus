@@ -1,0 +1,24 @@
+{
+  "name": "media",
+  "title": "Media",
+  "author": "Manzik <u3fian@gmail.com>",
+  "preview": "icon.png",
+  "description": "Play video or show image in your desktop background",
+  "plugintype": "wallpaper",
+  "settings": "settings.html",
+  "apptype": "js",
+  "wallpaper": "index.html",
+  "modify": "modify.html",
+  "version": "0.1.0",
+  "buttons": {
+    "items": {
+      "edit": true,
+      "view": true,
+      "add": true
+    },
+    "plugin": {
+      "settings": true,
+      "delete": false
+    }
+  }
+}

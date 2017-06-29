@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link href="css/flat-ui.min.css" rel="stylesheet"/>
+    <style>
+        input, button {
+            margin: 10px;
+        }
+
+        body {
+            padding: 20px;
+        }
+    </style>
+    <script>
+        var fs = require("fs");
+        function done()
+        {
+            var url = document.getElementById("url").value;
+            var lasturl;
+            if (previtem)
+            {
+                lasturl = previtem.data.url;
+                lasturl.substr(0, 7) == "http://" || lasturl.substr(0, 8) == "https://" ? lasturl : "http://" + lasturl;
+            }
+            displayus.done({ id: itemid, icon: (previtem&&url === lasturl) ? previtem.icon : undefined, label: url.substr(0, 7) == "http://" || url.substr(0, 8) == "https://" ? url : "http://" + url, description: "", data: { url: url.substr(0, 7) == "http://" || url.substr(0, 8) == "https://" ? url : "http://" + url } })
+        }
+        var prevurl, itemid, previtem;
+
+        var wvc;
+        window.addEventListener("load", function ()
+        {
+            displayus.addEventListener("load", function ()
+            {
+
+                displayus.getItem(function (item)
+                {
+                    if (item)
+                    {
+                        document.getElementById("url").value = item.data.url;
+                        itemid = item.id;
+                        prevurl = item.data.url;
+                        previtem = item;
+                    }
+                    else
+                    {
+                        prevurl = "";
+                    }
+                    document.getElementById("url").addEventListener("blur", function ()
+                    {
+                        if (document.getElementById("url").value != prevurl)
+                        {
+                            prevurl = document.getElementById("url").value;
+                            var url = document.getElementById("url").value;
+                            displayus.itemchange({ data: { url: url.substr(0, 7) == "http://" || url.substr(0, 8) == "https://" ? url : "http://" + url } });
+                        }
+                    });
+                })
+                document.getElementById("clickbutton").innerHTML = "Done";
+
+            })
+        })
+
+    </script>
+</head>
+<body style="background-color:rgba(255,255,255,0.3)">
+    <input type="text" value="" style="height:25px;" placeholder="URL" class="form-control" id="url" /><button class="btn btn-block btn-lg btn-primary" onclick="done()" id="clickbutton">Add</button>
+    <button class="btn btn-block btn-lg btn-danger" onclick="displayus.cancel()">Cancel</button>
+</body>
+</html>

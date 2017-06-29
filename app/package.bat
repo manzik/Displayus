@@ -1,0 +1,1 @@
+electron-packager . --platform=win32 --arch=all --out=..\build --icon=./logo.ico --version-string.CompanyName="Manzik" --win32metadata.ProductName="Displayus" --win32metadata.FileDescription="Displayus" --win32metadata.OriginalFilename="Displayus" --appCopyright="© 2017 Manzik(Mohsen Yousefian) ALL RIGHTS RESERVED" --overwrite

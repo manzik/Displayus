@@ -1,0 +1,59 @@
+{
+  "title": "Displayus",
+  "preview": "logoitemicon.png",
+  "name": "Displayus",
+  "website": "http://Displayus.org",
+  "author": "Manzik <u3fian@gmail.com>",
+  "description": "Advanced plugin based live wallpaper program, will to bring your desktop to life.",
+  "productName": "Displayus",
+  "version": "0.1.0",
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "^1.6.11",
+    "electron-packager": "^8.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Displayus/Displayus.git"
+  },
+  "dependencies": {
+    "electron-updater": "^2.4.3",
+    "auto-launch": "^5.0.1",
+    "decompress-zip": "^0.3.0",
+    "electron-vibrancy": "^0.1.3",
+    "ncp": "^2.0.0",
+    "request": "^2.81.0",
+    "rimraf": "^2.6.1"
+  },
+  "build": {
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Displayus",
+        "repo": "Displayus"
+      }
+    ],
+    "asarUnpack": [ "noasar\\controller\\windows\\" ],
+    "asar": true,
+    "directories": { "output": "..\\build" },
+    "compression": "maximum",
+    "forceCodeSigning": false,
+    "nsis": {
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "oneClick": false,
+      "allowElevation": true
+    },
+    "fileAssociations": {
+      "ext": [ "dus" ],
+      "description": "Displayus Plugin",
+      "icon": "dusicon.ico"
+    },
+    "protocols": {
+      "name": "Displayus",
+      "schemes": [
+        "displayus"
+      ]
+    }
+  }
+}

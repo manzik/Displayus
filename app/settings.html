@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link href="css/flat-ui/flat-ui.min.css" rel="stylesheet"></link>
+    <script>jQuery = $ = require("./js/jquery-3.1.1.min.js");</script>
+    <script src="js/flat-ui.min.js"></script>
+    <script>
+        var fs = require("fs");
+        var ipcRenderer = require('electron').ipcRenderer;
+        var remote = require("electron").remote, app = remote.app, url = require("url"), path=require("path");
+        var startup = require('auto-launch'), appexepath = app.getPath("exe"), appstartup = new startup({
+            isHidden: true,
+            name: 'Displayus',
+            path: (appexepath.substring(appexepath.lastIndexOf("\\") + 1, appexepath.length) === "electron.exe" ? __dirname + "\\runf.bat" : appexepath),
+        });
+        var userdata = app.getPath("userData");
+        function save()
+        {
+            var cival = document.getElementById("changeinterval").value;
+            if (String(parseFloat(cival)) != cival)
+            {
+                alert("Wallpaper change interval value is not a valid number");
+                return;
+            }
+            cival = parseFloat(cival);
+            var cmds = [];
+            if (opts.changeinterval != cival)
+            {
+                cmds.push({ type: "wallpaperchangeinterval", data: cival * 60 * 1000 });
+                opts.changeinterval = cival*60*1000;
+            }
+            var exitselect=$("#exitselect").val();
+            exitselect=exitselect=="0"?"ask":exitselect=="1"?"tray":exitselect=="2"?"quit":"";
+            opts.exitopt = exitselect;
+
+            var appupdateselect = $("#autoupdateapp").val();
+            appupdateselect = (appupdateselect == "0" ? "auto" : appupdateselect == "1" ? "ask" : appupdateselect == "2" ? "never" : "");
+            opts.autoupdateapp = appupdateselect;
+
+            opts.autoupdateplugins = $("#autoupdateplugins").is(":checked");
+            ipcRenderer.send('asynchronous-message', JSON.stringify({ type: "sendtomainwindow", data: { cmds: cmds } }));
+            fs.writeFile(userdata + "\\database.json", JSON.stringify(opts), function (err, res) { if (!err) require("electron").remote.getCurrentWindow().close(); else alert("Error: " + err); });
+        }
+        var opts = {};
+        window.addEventListener("load", function ()
+        {
+            var database = require(userdata + "\\database.json");
+            $("#autoupdateplugins").prop("checked", database.autoupdateplugins);
+            $("#autoupdateapp").prop("checked", database.autoupdateapp);
+            opts.changeinterval = database.changeinterval;
+            opts.exitopt = database.exitopt;
+            opts.autoupdateapp = database.autoupdateapp;
+            var option=(opts.exitopt=="ask"?"0":opts.exitopt=="tray"?"1":opts.exitopt=="quit"?"2":"");
+            $("#exitselect").val(option);
+            var autoupdateoption = (opts.autoupdateapp == "auto" ? "0" : opts.autoupdateapp == "ask" ? "1" : opts.autoupdateapp == "never" ? "2" : "");
+            console.log(autoupdateoption);
+            $("#autoupdateapp").val(autoupdateoption);
+
+            $("#select2-chosen-1").html($("#exitselect option[value='" + option + "']").text());
+            $("#select2-chosen-2").html($("#exitselect option[value='" + autoupdateoption + "']").text());
+            $("#changeinterval").val(String(parseFloat(database.changeinterval) / 60 / 1000));
+            var autostartupcheckbox = document.getElementById("startup");
+            appstartup.isEnabled().then(function (enabled)
+            {
+                if (enabled)
+                    autostartupcheckbox.setAttribute("checked", "checked");
+                autostartupcheckbox.addEventListener("click", function ()
+                {
+                    enabled = !enabled;
+                    appstartup[enabled ? "enable" : "disable"](true);
+                });
+                require("./js/application.js");
+            });
+            $("#autoupdateplugins").contents().find(":checkbox").bind('change', function ()
+            {
+                ipcRenderer.send('asynchronous-message', JSON.stringify({ type: "appsettingschanged", data: { type: "autoupdateplugins", data: { shouldautoupdate: this.checked}} }))
+                save();
+            });
+        });
+        function showaboutdisplayus()
+        {
+            fs.readFile(__dirname+"\\package.json", function (err, data)
+            {
+                if (!err)
+                {
+                    const BrowserWindow = remote.BrowserWindow;
+                    var win = new BrowserWindow({ modal: true, width: 800, height: 600, parent: remote.getCurrentWindow(), webPreferences: { preload: __dirname + "/displayus.js" }, title: "Displayus" });
+                    win.loadURL(url.format({ pathname: path.join(__dirname, "info.html"), protocol: 'file:', slashes: true }));
+                    win.webContents.executeJavaScript("onload(" + data.toString() + ")");
+                }
+                else
+                    console.err(err);
+            })
+            
+        }
+    </script>
+</head>
+<body>
+
+    <b style="font-size:18px;line-height:5px;">Wallpaper Change Interval (Minutes) : &nbsp;&nbsp;&nbsp; </b> <input type="text" value="" style="height:25px;" placeholder="Wallpaper Change Interval" class="form-control" id="changeinterval" /><br /><small style="margin:5px;font-size:11px;position:absolute;top:40px;">(enter 0 to disable wallpaper changing)</small><br/>
+    <b style="font-size:18px;line-height:5px;">When Exit Button Clicked : &nbsp;&nbsp;&nbsp; </b><select class="form-control select select-info mrs mbm" data-toggle="select" id="exitselect">
+            <option value="0">Ask</option>
+            <option value="1">Minimize to tray</option>
+            <option value="2">Quit</option>
+          </select>
+    
+    
+    <br />
+
+    <b style="font-size:18px;line-height:5px;">Auto Start with Windows : &nbsp;&nbsp;&nbsp; </b>
+    <label class="checkbox" for="startup">
+        <input type="checkbox" id="startup" data-toggle="checkbox">
+        </label>
+        <br />
+    <b style="font-size:18px;line-height:5px;">Auto Update Plugins : &nbsp;&nbsp;&nbsp; </b>
+    <label class="checkbox" for="autoupdateplugins">
+        <input type="checkbox" id="autoupdateplugins" data-toggle="checkbox">
+    </label>
+    <br />
+    <b style="font-size:18px;line-height:5px;">App Update : &nbsp;&nbsp;&nbsp; </b>
+    <select class="form-control select select-info mrs mbm" data-toggle="select" id="autoupdateapp">
+        <option value="0">Auto</option>
+        <option value="1">Ask</option>
+        <option value="2">Never</option>
+    </select>
+
+
+
+
+    <br />
+        <button class="btn btn-block btn-lg btn-primary" style="margin:20px;" onclick="save()" id="clickbutton">Save</button>
+    <button class="btn btn-block btn-lg btn-primary" style="margin:20px;position:relative;float:right;bottom:0px;" onclick="showaboutdisplayus()" id="clickbutton">About</button>
+</body>
+</html>

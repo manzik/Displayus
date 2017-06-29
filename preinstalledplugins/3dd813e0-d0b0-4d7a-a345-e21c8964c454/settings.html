@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link href="css/flat-ui.min.css" rel="stylesheet"/>
+
+<style>
+input,button
+{
+  margin:10px;
+}
+body
+{
+  padding:20px;
+}
+table
+{
+  border-radius: 5px;
+}
+tr
+{
+	border-bottom: #888 solid;
+	background-color: rgb(200,200,200);
+	transition:all 0.3s;
+}
+tr:hover
+{
+	border-bottom: #888 solid;
+	background-color: rgb(100,100,100)
+}
+</style>
+<script>
+function addfile()
+{
+	require('electron').remote.dialog.showOpenDialog({title:"Displayus Media Plugin",buttonLabel:"Add",properties:["multiSelections","openFile"]},function(filepath){
+filepath.forEach(function(a){arr_files.push(a);})
+		reloadfilelist();});
+}
+arr_files=[];
+function reloadfilelist()
+{
+  var table=document.getElementById("table");
+  table.innerHTML="";
+  arr_files.forEach(function(a){
+table.innerHTML+="<tr><td>"+a+"</td></tr>";
+  });
+  
+}
+var fs=require("fs");
+function done()
+{
+  fs.readFile(__dirname+"/database.json",function(err,data){if(!err){
+    var database=JSON.parse(data);
+	database.settings.fitmode={value:document.getElementById("fitselect").value};
+	fs.writeFile(__dirname+"/database.json", JSON.stringify(database), 'utf8',function(err,data){displayus.close();});
+  }});
+	
+}
+window.addEventListener("load",function(){
+
+	var database=require("./database.json");
+	document.getElementById("fitselect").value=database.settings.fitmode.value;
+	 $(".select2-chosen").html($("#fitselect option[value='"+database.settings.fitmode.value+"']").text());
+})
+
+</script>
+</head>
+<body>
+ <b style="font-size:18px;line-height:5px;">Fit : &nbsp;&nbsp;&nbsp; </b> 
+<select class="form-control select select-info mrs mbm" data-toggle="select" id="fitselect">
+            <option value="0">Fill</option>
+            <option value="1">Fit</option>
+            <option value="2">Scretch</option>
+            <option value="3">Center</option>
+          </select>
+          <br/>
+<button class="btn btn-block btn-lg btn-primary" style="position:relative;margin:0;margin-left:60px;" onclick="done()">Done</button>
+<script>jQuery=$=require("./js/jquery-3.1.1.min.js");</script>
+<script src="js/flat-ui.min.js"></script>
+<script>require("./js/application.js");</script>
+</body>
+</html>
