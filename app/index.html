@@ -55,7 +55,7 @@
             name: 'Displayus',
             path: appexepath,
         }), menu = remote.Menu, menuitem = remote.MenuItem;
-
+        var os = require("os"), shouldblur = os.platform() === "win32" && os.release().split(".")[0] === "10", blur = require("electron-vibrancy");;
 
         window.onerror = function (message, url, lineNumber)
         {
@@ -1348,8 +1348,9 @@
         {
 
             const BrowserWindow = remote.BrowserWindow;
-            var win = new BrowserWindow({ modal: true, width: 800, height: 600, parent: currentwindow, webPreferences: { preload: __dirname + "/displayus.js" } });
+            var win = new BrowserWindow({ title: "Settings", modal: true, width: 800, height: 710, parent: currentwindow, webPreferences: { preload: __dirname + "/displayus.js" }/*, transparent: true, frame: false*/ });
             win.loadURL(url.format({ pathname: path.join(__dirname, "settings.html"), protocol: 'file:', slashes: true }));
+            
         }
 
         function readyforimage()

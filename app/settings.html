@@ -1,13 +1,64 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <link href="css/flat-ui/flat-ui.min.css" rel="stylesheet"></link>
-    <script>jQuery = $ = require("./js/jquery-3.1.1.min.js");</script>
-    <script src="js/flat-ui.min.js"></script>
+    <script>jQuery = $ = require("./settings template/jquery.min.js");</script>
+    <link href="settings template/displayusplugins.css" rel="stylesheet" />
+    <link href="settings template/transition.min.css" rel="stylesheet" />
+    <script src="settings template/transition.min.js"></script>
+    <link href="settings template/waves.min.css" rel="stylesheet" />
+    <script src="settings template/waves.min.js"></script>
+    <link href="settings template/dropdown.min.css" rel="stylesheet" />
+    <script src="settings template/dropdown.min.js"></script>
+    <script src="settings template/displayusplugins.js"></script>
+    <style>
+        html {
+            -webkit-user-select: none;
+            -webkit-app-region: drag;
+        }
+        body {
+            
+            background-color: rgba(238, 238, 238,0.5);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .settcategory {
+            box-shadow: rgba(0,0,0,0.2) 1px 1px 3px;
+            background-color: rgb(255, 255, 255);
+            width: 600px;
+            transform: translateX(-50%);
+            left: 50%;
+            position: relative;
+            margin-bottom:5px;
+        }
+
+        .fieldcategory {
+            box-shadow: rgba(0,0,0,0.5) 0.5px 1px 3px;
+            background-color: rgb(255, 255, 255);
+            width: 520px;
+            left: 0px;
+            top: 0;
+            padding: 40px;
+            position: relative;
+        }
+
+        .ui.selection.dropdown {
+            top: -15px;
+            float: right;
+            right: -2.5px;
+            height: 20px;
+            position: relative;
+        }
+
+        .cb {
+            float: right;
+            right: 120px;
+            position: relative;
+        }
+    </style>
     <script>
         var fs = require("fs");
         var ipcRenderer = require('electron').ipcRenderer;
-        var remote = require("electron").remote, app = remote.app, url = require("url"), path=require("path");
+        var remote = require("electron").remote, shell=require("electron").shell,app = remote.app, url = require("url"), path = require("path");
         var startup = require('auto-launch'), appexepath = app.getPath("exe"), appstartup = new startup({
             isHidden: true,
             name: 'Displayus',
@@ -17,20 +68,20 @@
         function save()
         {
             var cival = document.getElementById("changeinterval").value;
-            if (String(parseFloat(cival)) != cival)
+            if (String(parseFloat(cival)) != cival || parseFloat(cival) < 0)
             {
                 alert("Wallpaper change interval value is not a valid number");
                 return;
             }
-            cival = parseFloat(cival);
+            cival = parseFloat(cival) * (($("#shouldchangeinterval").prop("checked") + 0) || -1);
             var cmds = [];
-            if (opts.changeinterval != cival)
+            if (opts.changeinterval != cival || opts.intervalwasenabled != $("#shouldchangeinterval").prop("checked"))
             {
                 cmds.push({ type: "wallpaperchangeinterval", data: cival * 60 * 1000 });
-                opts.changeinterval = cival*60*1000;
+                opts.changeinterval = cival * 60 * 1000;
             }
-            var exitselect=$("#exitselect").val();
-            exitselect=exitselect=="0"?"ask":exitselect=="1"?"tray":exitselect=="2"?"quit":"";
+            var exitselect = $("#exitselect").val();
+            exitselect = exitselect == "0" ? "ask" : exitselect == "1" ? "tray" : exitselect == "2" ? "quit" : "";
             opts.exitopt = exitselect;
 
             var appupdateselect = $("#autoupdateapp").val();
@@ -41,6 +92,21 @@
             ipcRenderer.send('asynchronous-message', JSON.stringify({ type: "sendtomainwindow", data: { cmds: cmds } }));
             fs.writeFile(userdata + "\\database.json", JSON.stringify(opts), function (err, res) { if (!err) require("electron").remote.getCurrentWindow().close(); else alert("Error: " + err); });
         }
+        function checkdisabledparts()
+        {
+            if ($("#shouldchangeinterval").prop("checked"))
+            {
+                $("#setintervalcont").css("opacity", "1");
+                $("#setintervalcont").css("pointer-events", "auto");
+                $("#setintervalcont").css("user-select", "auto");
+            }
+            else
+            {
+                $("#setintervalcont").css("opacity", "0.5");
+                $("#setintervalcont").css("pointer-events", "none");
+                $("#setintervalcont").css("user-select", "none");
+            }
+        }
         var opts = {};
         window.addEventListener("load", function ()
         {
@@ -50,15 +116,17 @@
             opts.changeinterval = database.changeinterval;
             opts.exitopt = database.exitopt;
             opts.autoupdateapp = database.autoupdateapp;
-            var option=(opts.exitopt=="ask"?"0":opts.exitopt=="tray"?"1":opts.exitopt=="quit"?"2":"");
+            var option = (opts.exitopt == "ask" ? "0" : opts.exitopt == "tray" ? "1" : opts.exitopt == "quit" ? "2" : "");
             $("#exitselect").val(option);
             var autoupdateoption = (opts.autoupdateapp == "auto" ? "0" : opts.autoupdateapp == "ask" ? "1" : opts.autoupdateapp == "never" ? "2" : "");
-            console.log(autoupdateoption);
             $("#autoupdateapp").val(autoupdateoption);
 
             $("#select2-chosen-1").html($("#exitselect option[value='" + option + "']").text());
             $("#select2-chosen-2").html($("#exitselect option[value='" + autoupdateoption + "']").text());
-            $("#changeinterval").val(String(parseFloat(database.changeinterval) / 60 / 1000));
+            var changeinterval = parseFloat(database.changeinterval) / 60 / 1000;
+            $("#shouldchangeinterval").prop("checked", changeinterval > 0)
+            opts.intervalwasenabled = $("#shouldchangeinterval").prop("checked");
+            $("#changeinterval").val(changeinterval === 0 ? "" : String(Math.abs(changeinterval)));
             var autostartupcheckbox = document.getElementById("startup");
             appstartup.isEnabled().then(function (enabled)
             {
@@ -69,17 +137,32 @@
                     enabled = !enabled;
                     appstartup[enabled ? "enable" : "disable"](true);
                 });
-                require("./js/application.js");
+            });
+            $("#shouldchangeinterval").click(()=>
+            {
+                
+                checkdisabledparts();
             });
             $("#autoupdateplugins").contents().find(":checkbox").bind('change', function ()
             {
-                ipcRenderer.send('asynchronous-message', JSON.stringify({ type: "appsettingschanged", data: { type: "autoupdateplugins", data: { shouldautoupdate: this.checked}} }))
+                ipcRenderer.send('asynchronous-message', JSON.stringify({ type: "appsettingschanged", data: { type: "autoupdateplugins", data: { shouldautoupdate: this.checked } } }))
                 save();
             });
+            checkdisabledparts();
+            setclass();
+            
+            var sheet = document.styleSheets[0];
+            var rules = sheet.rules;
+            sheet.insertRule('.lbl:after { transition:none !important;}', rules.length);
+            $(".settcategory,.dusplugintempl").css("opacity", "1");
+            setTimeout(() =>
+            {
+                sheet.removeRule(rules.length-1);
+            }, 300);
         });
         function showaboutdisplayus()
         {
-            fs.readFile(__dirname+"\\package.json", function (err, data)
+            fs.readFile(__dirname + "\\package.json", function (err, data)
             {
                 if (!err)
                 {
@@ -91,44 +174,63 @@
                 else
                     console.err(err);
             })
-            
+
         }
     </script>
 </head>
 <body>
+    <div class="settcategory" style="opacity:0;transition:opacity 0.3s;margin-top:50px;">
 
-    <b style="font-size:18px;line-height:5px;">Wallpaper Change Interval (Minutes) : &nbsp;&nbsp;&nbsp; </b> <input type="text" value="" style="height:25px;" placeholder="Wallpaper Change Interval" class="form-control" id="changeinterval" /><br /><small style="margin:5px;font-size:11px;position:absolute;top:40px;">(enter 0 to disable wallpaper changing)</small><br/>
-    <b style="font-size:18px;line-height:5px;">When Exit Button Clicked : &nbsp;&nbsp;&nbsp; </b><select class="form-control select select-info mrs mbm" data-toggle="select" id="exitselect">
-            <option value="0">Ask</option>
-            <option value="1">Minimize to tray</option>
-            <option value="2">Quit</option>
-          </select>
-    
-    
-    <br />
+        <div class="fieldcategory">
+            <b style="font-size:18px;line-height:5px;">Live Background Slideshow</b>
+            <div class="cb">
+                <input type="checkbox" id="shouldchangeinterval" class="cbx hidden">
+                <label for="shouldchangeinterval" class="lbl"></label>
+            </div>
+            <br /><br /><br />
+            <div id="setintervalcont" style="transition:opacity 0.5s;">
+                <b style="font-size:18px;line-height:5px;">Interval (Minutes)</b> <input type="number" step="5" style="float:right;right:25px;height:25px;top:0;transform: translateY(-9px);" placeholder="Minutes" class="dusplugintempl shadowinp" id="changeinterval" /><br />
+            </div>
+        </div>
+        <div class="fieldcategory">
+            <b style="font-size:18px;line-height:5px;">When Exit Button Clicked</b><select class="dusplugintempl" id="exitselect" style="">
+                <option value="0">Ask</option>
+                <option value="1">Minimize to tray</option>
+                <option value="2">Quit</option>
+            </select>
+        </div>
+        <div class="fieldcategory">
+            <b style="font-size:18px;line-height:5px;">App Update </b>
+            <select class="dusplugintempl" id="autoupdateapp">
+                <option value="0">Auto</option>
+                <option value="1">Ask</option>
+                <option value="2">Never</option>
+            </select>
+            <br />
+            <br />
 
-    <b style="font-size:18px;line-height:5px;">Auto Start with Windows : &nbsp;&nbsp;&nbsp; </b>
-    <label class="checkbox" for="startup">
-        <input type="checkbox" id="startup" data-toggle="checkbox">
-        </label>
-        <br />
-    <b style="font-size:18px;line-height:5px;">Auto Update Plugins : &nbsp;&nbsp;&nbsp; </b>
-    <label class="checkbox" for="autoupdateplugins">
-        <input type="checkbox" id="autoupdateplugins" data-toggle="checkbox">
-    </label>
-    <br />
-    <b style="font-size:18px;line-height:5px;">App Update : &nbsp;&nbsp;&nbsp; </b>
-    <select class="form-control select select-info mrs mbm" data-toggle="select" id="autoupdateapp">
-        <option value="0">Auto</option>
-        <option value="1">Ask</option>
-        <option value="2">Never</option>
-    </select>
+            <br />
+            <b style="font-size:18px;line-height:5px;">Auto Start with Windows </b>
+            <div class="cb">
+                <input type="checkbox" id="startup" class="cbx hidden">
+                <label for="startup" class="lbl"></label>
+            </div>
+            <br /><br />
+            <br />
+            <b style="font-size:18px;line-height:5px;">Auto Update Plugins</b>
+            <div class="cb">
+                <input type="checkbox" id="autoupdateplugins" class="cbx hidden">
+                <label for="autoupdateplugins" class="lbl"></label>
+            </div>
+            <br />
 
 
+        </div>
 
 
-    <br />
-        <button class="btn btn-block btn-lg btn-primary" style="margin:20px;" onclick="save()" id="clickbutton">Save</button>
-    <button class="btn btn-block btn-lg btn-primary" style="margin:20px;position:relative;float:right;bottom:0px;" onclick="showaboutdisplayus()" id="clickbutton">About</button>
+    </div>
+    <button class="dusplugintempl" style="opacity:0;position:relative;left:calc(50% - 320px);margin:20px;background-color:rgb(0, 255, 33);width:100px;transition:opacity 0.15s,box-shadow 0.15s,transform 0.3s;" onclick="save()" id="clickbutton">Save</button>
+    <button class="dusplugintempl" style="opacity:0;position:relative;left:calc(50% - 220px);background-color:rgb(151, 255, 0);width:150px;transition:opacity 0.3s,box-shadow 0.15s,transform 0.15s;" onclick="shell.openItem(userdata);">Open Storage Path</button>
+    <button class="dusplugintempl" style="opacity:0;margin:20px;right:calc(50% - 320px);position:relative;float:right;bottom:0px;background-color:rgb(0, 193, 255);width:100px;transition:opacity 0.3s,box-shadow 0.15s,transform 0.15s;" onclick="showaboutdisplayus()" id="clickbutton">About</button>
 </body>
 </html>

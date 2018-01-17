@@ -77,6 +77,8 @@
                 {
                     document.getElementById("webview").src = item.data.url;
                     setTimeout(() => { setwvonload(); }, 0);
+                    document.getElementById("maincont").style.display = "block";
+                    document.getElementById("enterurlcont").style.display = "none";
                 }
                 else
                 {

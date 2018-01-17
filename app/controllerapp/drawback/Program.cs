@@ -643,8 +643,8 @@ namespace Displayus
         static bool iswindows7 = ver.Major == 6 && ver.Minor == 1;
         [DllImport("user32")]
         private static extern bool SetForegroundWindow(IntPtr hwnd);
-        static IntPtr basebackground = IntPtr.Zero;
-        static List<IntPtr> overlayitems = new List<IntPtr>();
+        static IntPtr overlaywindow = IntPtr.Zero;
+        static IntPtr mainwindow = IntPtr.Zero;
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool IsWindow(IntPtr hWnd);
@@ -685,6 +685,16 @@ namespace Displayus
                     socketsend += ("anotherwindowfullscreen=" + isanotherappinfullscreen().ToString());
                     senddata();
                 }
+
+                else
+                if (reqdata[0] == "setasoverlaybyhandlehex")
+                {
+                    overlaywindow = new IntPtr(Convert.ToInt32(reqdata[1], 16));
+                    if (mainwindow != IntPtr.Zero)
+                    {
+                        W32.SetParent(overlaywindow, mainwindow);
+                    }
+                }
                 else
                 if (reqdata[0].Substring(0, 26) == "setasbackgroundbyhandlehex")
                 {
@@ -717,6 +727,14 @@ namespace Displayus
                         senddata();
                     }
                     */
+                    if (overlaywindow != IntPtr.Zero)
+                    {
+                        W32.SetParent(overlaywindow, wallpaperhandle);
+                        SetWindowPos(overlaywindow, new IntPtr(-1), 0, 0, 0, 0, 0x1 | 0x2);
+                        SetForegroundWindow(overlaywindow);
+                        
+                    }
+                    mainwindow = wallpaperhandle;
                     socketsend += "log=" + wallpaperhandle.ToString() + "|";
                     socketsend += "senttobackground={\"handle\":" + reqdata[1] + "}|";
                     senddata();
@@ -755,6 +773,7 @@ namespace Displayus
                     }
                 }
                 else
+
                     if (reqdata[0] == "removefrombackgroundbyhandlehex")
                 {
                     /*
@@ -772,6 +791,11 @@ namespace Displayus
                     if (!IsWindow(removingwallpaperhandle))
                         continue;
                     W32.SetParent(removingwallpaperhandle, IntPtr.Zero);
+                    if (overlaywindow != IntPtr.Zero && mainwindow == removingwallpaperhandle)
+                    {
+                        W32.SetParent(overlaywindow, workerw);
+                    }
+                    mainwindow = IntPtr.Zero;
                 }
                 else
                     if (reqdata[0] == "removefrombackground")
@@ -842,11 +866,8 @@ namespace Displayus
 
                     const int nChars = 2048;
                     StringBuilder Buff = new StringBuilder(nChars);
-                    if (GetWindowText(currentwindow, Buff, nChars) > 0)
-                    {
-
-                        socketsend += "currentpointing=" + ("{\"title\":\"" + Buff.ToString() + "\",\"class\":\"" + getclass(currentwindow) + "\"}").Replace("\\", "\\\\").Replace("|", "") + "|";
-                    }
+                    GetWindowText(currentwindow, Buff, nChars);
+                    socketsend += "currentpointing=" + ("{\"title\":\"" + Buff.ToString() + "\",\"class\":\"" + getclass(currentwindow) + "\"}").Replace("\\", "\\\\").Replace("|", "") + "|";
                     lastcurrentwindow = currentwindow;
                 }
                 int isonicontmp = isonicon();

@@ -2,7 +2,7 @@ const { app, BrowserWindow, Tray, Menu, Protocol } = require('electron');
 var electron = require("electron"), cp = require("child_process");
 var path = require('path'), fs = require("fs"), url = require('url'), path = require('path'), os = require("os"), systempreferences = electron.systemPreferences;
 var blur = require("electron-vibrancy");
-var mainwindow;
+var mainwindow,overlaywindow;
 var userdata = app.getPath("userData");
 var autoUpdater = require("electron-updater").autoUpdater;
 autoUpdater.autoDownload = false;
@@ -158,13 +158,13 @@ function forceredraw(time, interval)
     var start = Date.now();
     function sendredraw()
     {
-        mainwindow.send("asynchronous-reply", JSON.stringify({ type: "forceredraw", data: {  } }));
+        mainwindow.send("asynchronous-reply", JSON.stringify({ type: "forceredraw", data: {} }));
         if (Date.now() - start < time)
             setTimeout(sendredraw, interval);
     }
     setTimeout(sendredraw, interval);
 }
-
+var firstbackground = true;
 function newwall(arg, rembg)
 {
 
@@ -220,7 +220,13 @@ function newwall(arg, rembg)
 
         window.on("ready-to-show", () =>
         {
+            if (firstbackground)
+            {
+                firstbackground = false;
+                //overlaywindow.showInactive();
+            }
             socketobj["setasbackgroundbyhandlehex"] = handlehexfromwindow(window);
+            
             senddata();
 
             forceredraw(400, 20);
@@ -234,8 +240,7 @@ function newwall(arg, rembg)
                     previewwalls.push({ window: newwall, plugin: arg.data.plugin, item: arg.data.item, apptype: "js", preview: true, renderstatus: { reasonsnotto: [], isrendering: true } });
                 else
                     walls.push({ window: newwall, plugin: arg.data.plugin, item: arg.data.item, apptype: "js", renderstatus: { reasonsnotto: [], isrendering: true } });
-
-                setnopendingbackgroundchange();
+                setTimeout(setnopendingbackgroundchange, 450);
             });
 
 
@@ -367,7 +372,7 @@ function anotherwindowfullscreenchanged()
     checkrenderstatus()
     */
 }
-var changingbackground = false,arr_backgroundchangedcb=[];
+var changingbackground = false, arr_backgroundchangedcb = [];
 var ipcMain = require('electron').ipcMain, walls = [], mainwindowevent, newitem = {}, activated = false;
 function onmessage(event, arg)
 {
@@ -492,110 +497,108 @@ function onmessage(event, arg)
             setnopendingbackgroundchange();
             break;
         case "newwall":
-            var changeit = () =>
+            function changeifhaveto()
             {
-                changingbackground = true;
-                if (arg.data.preview)
+                var changeit = () =>
                 {
-                    if (arg.data.apptype == "js")
-                    {
-                        var rembg = undefined;
-                        if (previewwalls[0])
-                        {
-
-                            removingwall = previewwalls[0];
-                            if (removingwall.apptype == "js")
-                            {
-                                rembg = () =>
-                                {
-                                    animatewindow.AnimateWindow.async(previewwalls[0].window.getNativeWindowHandle().readInt32LE(0), 400, 589824, () =>
-                                    {
-                                        socketobj["removefrombackgroundbyhandlehex"] = handlehexfromwindow(previewwalls[0].window);
-                                        senddata();
-                                        previewwalls[0].window.close();
-                                        previewwalls[0].window = null;
-                                        previewwalls.splice(0, 1);
-                                    });
-                                }
-
-                            }
-                            else
-                                if (removedwall.apptype == "cs")
-                                {
-
-                                }
-                        }
-
-                        newwall(arg, rembg);
-                    }
-                    else
-                        if (arg.data.apptype == "cs")
-                            newcswall(arg);
-                }
-                else
-                {
-                    if (walls[0] && walls[0].plugin == arg.data.plugin && activated)
-                    {
-                        if (!arg.data.item)
-                            return;
-                        newitem.item = arg.data.item;
-                        newitem.arg = arg;
-                        walls.forEach(function (wall)
-                        {
-                            if (wall)
-                            {
-                                if (wall.apptype == "js")
-                                    wall.window.webContents.send("asynchronous-reply", JSON.stringify({ type: "event", data: { type: "checknewitemeventhandler", args: [] } }));
-                                else
-                                    if (wall.apptype == "cs")
-                                        wall.cp.stdin.write(JSON.stringify({ type: "event", data: { type: "checknewitemeventhandler", args: [] } }) + "\n");
-
-                            }
-                        });
-                    }
-                    else
+                    changingbackground = true;
+                    if (arg.data.preview)
                     {
                         if (arg.data.apptype == "js")
                         {
-                            var didremoveprevbackground = false;
-
-
-
-                            newwall(arg, () =>
+                            var rembg = undefined;
+                            if (previewwalls[0])
                             {
-                                walls.forEach((wall, i) =>
+
+                                removingwall = previewwalls[0];
+                                if (removingwall.apptype == "js")
                                 {
-                                    didremoveprevbackground = true;
-                                    animatewindow.AnimateWindow.async(wall.window.getNativeWindowHandle().readInt32LE(0), 400, 589824, () =>
+                                    rembg = () =>
+                                    {
+                                        animatewindow.AnimateWindow.async(previewwalls[0].window.getNativeWindowHandle().readInt32LE(0), 400, 589824, () =>
+                                        {
+                                            socketobj["removefrombackgroundbyhandlehex"] = handlehexfromwindow(previewwalls[0].window);
+                                            senddata();
+                                            previewwalls[0].window.close();
+                                            previewwalls[0].window = null;
+                                            previewwalls.splice(0, 1);
+                                        });
+                                    }
+
+                                }
+                                else
+                                    if (removedwall.apptype == "cs")
                                     {
 
-                                        setTimeout(() =>
-                                        {
-                                            socketobj["removefrombackgroundbyhandlehex"] = handlehexfromwindow(wall.window);
-                                            senddata();
-                                            wall.window.close();
-                                            wall.window = null;
-                                            walls.splice(0, 1);
-                                        }
-                                            , 0);
+                                    }
+                            }
 
-
-                                    });
-                                });
-                            });
+                            newwall(arg, rembg);
                         }
                         else
                             if (arg.data.apptype == "cs")
                                 newcswall(arg);
                     }
+                    else
+                    {
+                        if (walls[0] && walls[0].plugin == arg.data.plugin && activated)
+                        {
+                            if (!arg.data.item)
+                                return;
+                            newitem.item = arg.data.item;
+                            newitem.arg = arg;
+                            walls.forEach(function (wall)
+                            {
+                                if (wall)
+                                {
+                                    if (wall.apptype == "js")
+                                        wall.window.webContents.send("asynchronous-reply", JSON.stringify({ type: "event", data: { type: "checknewitemeventhandler", args: [] } }));
+                                    else
+                                        if (wall.apptype == "cs")
+                                            wall.cp.stdin.write(JSON.stringify({ type: "event", data: { type: "checknewitemeventhandler", args: [] } }) + "\n");
+
+                                }
+                            });
+                        }
+                        else
+                        {
+                            if (arg.data.apptype == "js")
+                            {
+                                var didremoveprevbackground = false;
+
+
+                                newwall(arg, () =>
+                                {
+                                    walls.forEach((wall, i) =>
+                                    {
+                                        didremoveprevbackground = true;
+                                        animatewindow.AnimateWindow.async(wall.window.getNativeWindowHandle().readInt32LE(0), 400, 589824, () =>
+                                        {
+                                            socketobj["removefrombackgroundbyhandlehex"] = handlehexfromwindow(wall.window);
+                                            senddata();
+                                            wall.window.close();
+                                            wall.window = null;
+                                            if (walls[i])
+                                                walls.splice(i, 1);
+
+                                        });
+                                    });
+                                });
+                            }
+                            else
+                                if (arg.data.apptype == "cs")
+                                    newcswall(arg);
+                        }
+                    }
                 }
+                if (changingbackground)
+                {
+                    arr_backgroundchangedcb.push(() => { changeifhaveto(); });
+                }
+                else
+                    changeit();
             }
-            if (changingbackground)
-            {
-                arr_backgroundchangedcb.push(changeit);
-            }
-            else
-                changeit();
+            changeifhaveto();
             break;
         case "getitem":
             event.sender.send('asynchronous-reply', JSON.stringify({ type: "cb", data: { arguments: (event.sender.item ? [event.sender.previewtype === "add" ? undefined : event.sender.item] : undefined), id: arg.data.id, type: "item" } }))
@@ -716,6 +719,25 @@ function runmainprogram()
             mainwindow.show();
     });
 
+    /*
+    overlaywindow = new BrowserWindow({
+        icon: path.join(__dirname, "Tray.ico"), title: "Displayus Overlay",frame: false, titleBarStyle: "hidden", kiosk: true, show: false, taskbar: false, skipTaskbar: true, transparent: true
+    });
+    overlaywindow .loadURL(url.format({
+        pathname: path.join(__dirname, 'overlay.html'),
+        protocol: 'file:',
+        slashes: true
+    }));
+    
+    overlaywindow.on("ready-to-show", () =>
+    {
+        
+        socketobj["setasoverlaybyhandlehex"] = handlehexfromwindow(overlaywindow);
+        senddata();
+        
+    });
+    */
+
     app.setAsDefaultProtocolClient("displayus");
 
 }
@@ -771,7 +793,7 @@ function getunpackeddir(dir)
 function startcsharp()
 {
     cpsharp = cp.spawn(getunpackeddir("noasar\\controller\\windows\\_DisplayusController.exe"));
-    
+
     cpsharp.stdout.on('data', function (data)
     {
         data = data + "";

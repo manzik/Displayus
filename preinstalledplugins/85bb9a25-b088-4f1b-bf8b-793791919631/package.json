@@ -2,7 +2,8 @@
   "name": "Wallpaperus",
   "version": "0.1.0",
   "dependencies": {
-    "request": "^2.81.0"
+    "request": "^2.81.0",
+    "throttle": "^1.0.3"
   },
   "title": "Wallpaperus",
   "author": "Manzik <u3fian@gmail.com>",

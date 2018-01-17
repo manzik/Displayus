@@ -5,6 +5,10 @@
     position:fixed;
     width:100%;
 }
+.card
+{
+background-color:rgba(255,255,255,0.75);
+}
 body
 {
     background-color:rgba(0,0,0,0) !important;

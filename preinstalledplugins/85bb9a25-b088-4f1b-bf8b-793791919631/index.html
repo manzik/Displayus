@@ -4,14 +4,43 @@
     <meta charset="UTF-8">
     <title>Hello World!</title>
     <script>
-        var fs = require("fs"), request = require("request"), path = require("path");
+        var fs = require("fs"), request = require("request"), path = require("path"), throttle = require("throttle");;
+
+        window.onerror=function(msg, url, linenumber)
+        {
+            console.error('Error message: ' + msg + '\nURL: ' + url + '\nLine Number: ' + linenumber);
+            progress.hide();
+            return true;
+        }
+
+        progress = {
+            setpercent: (percent) =>
+            {
+                percent = parseFloat(percent) / 100;
+                document.getElementById("progress").style.top = 71.2 + (1 - percent) * 57.6 + "px";
+                document.getElementById("progress").style.height = (percent) * 57.6 + "px";
+                document.getElementById("progress").style.backgroundColor = navigator.onLine ? "rgb(0, 185, 255)" : "rgb(255, 50, 50);";
+            },
+            hide: () =>
+            {
+                document.getElementById("progresscont").style.opacity = 0;
+                progress.isshown = false;
+            },
+            show: () =>
+            {
+                document.getElementById("progresscont").style.opacity = 1;
+                progress.isshown = true;
+            },
+            isshown: false
+        };
+
         if (!fs.existsSync(__dirname + "\\images\\"))
             fs.mkdirSync(__dirname + "\\images\\");
         if (fs.existsSync(__dirname + "\\db.json"))
             var db = JSON.parse(fs.readFileSync(__dirname + "\\db.json"));
         else
         {
-            db = { alreadysaw: [] };
+            db = { alreadysaw: [], readyimg: undefined };
             fs.writeFileSync(__dirname + "\\db.json", JSON.stringify(db));
         }
         function resetall()
@@ -21,43 +50,69 @@
         }
         function unsplashgetresultbykeypage(key, page, cb)
         {
-            request("https://unsplash.com/search/" + key + "&page=" + page + "", (req, res, body) =>
-            {
-                var codestart = body.indexOf("<script>") + "<script>".length;
-                for (var i = 0; i < 4; i++)
-                    codestart = body.indexOf("<script>", codestart) + "<script>".length;
-                var codeend = body.indexOf("</" + "script>", codestart);
-                var code = body.substring(codestart, codeend);
-                code = code.substring(code.indexOf("{"));
-                code = code.substring(0, code.length - 1);
-                code = JSON.parse(code);
-                var photos = code.entities.photos;
-                cb({ imgs: Object.keys(photos).map((x) => { return { id: "unsplash" + x, url: photos[x].urls.full } }) })
-            });
+            request({
+                headers: {
+                    "authorization": "Client-ID c94869b36aa272dd62dfaeefed769d4115fb3189a9d1ec88ed457207747be626"
+                }, uri: "https://unsplash.com/napi/search/photos?query=" + key + "&xp=&per_page=20&page=" + page + ""
+            }, (err, res, body) =>
+                {
+                    if (err)
+                        cb({ imgs: [], e: err, quit: true });
+                    try
+                    {
+                        body = JSON.parse(body);
+                        cb({ imgs: body.results.map((x) => { return { id: "unsplash" + x.id, url: x.links.download } }) })
+                    }
+                    catch (e)
+                    {
+
+                        cb({ imgs: [], e: e });
+                    }
+                });
         }
         function redditgetresultbykeypage(key, page, cb)
         {
-            request("https://www.reddit.com/r/wallpapers/search.json?q=" + key + "&count=" + (page - 1) * 100 + "&limit=100&&restrict_sr=on", (req, res, body) =>
+            request("https://www.reddit.com/r/wallpapers/search.json?q=" + key + "&count=" + (page - 1) * 100 + "&limit=100&&restrict_sr=on", (err, res, body) =>
             {
-                body = JSON.parse(body);
-                body = {
-                    imgs: body.data.children.map((x) => { x = x.data; return { id: "sr" + x.id, url: x.url }; })
-                };
-                cb(body);
+                if (err)
+                    cb({ imgs: [], e: err, quit: true });
+                try
+                {
+                    body = JSON.parse(body);
+                    body = {
+                        imgs: body.data.children.map((x) => { x = x.data; return { id: "sr" + x.id, url: x.url }; })
+                    };
+                    cb(body);
+                }
+                catch (e)
+                {
+                    cb({ imgs: [], e: e });
+                }
             });
         }
         function wallpaperswidegetresultbykeypage(key, page, cb)
         {
-            request("http://wallpaperswide.com/search/page/" + page + "?q=" + key, (req, res, body) =>
+            request("http://wallpaperswide.com/search/page/" + page + "?q=" + key, (err, res, body) =>
             {
-                var result = body.split("<div class=\"thumb\">").slice(1).map((x) => { var start = x.indexOf("<a href=\"") + ("<a href=\"").length; x = x.substring(start + 1, x.indexOf(" title=", start) - 1); return x.substring(0, x.indexOf("-")); });
-                result = { imgs: result.map((img) => { return { id: "ww" + img, realid: img }; }) };
-                cb(result);
+                if (err)
+                    cb({ imgs: [], e: err, quit: true });
+                try
+                {
+
+                    var result = body.split("<div class=\"thumb\">").slice(1).map((x) => { var start = x.indexOf("<a href=\"") + ("<a href=\"").length; x = x.substring(start + 1, x.indexOf(" title=", start) - 1); return x.substring(0, x.indexOf("-")); });
+                    result = { imgs: result.map((img) => { return { id: "ww" + img, realid: img }; }) };
+                    cb(result);
+                }
+                catch (e)
+                {
+                    cb({ imgs: [], e: e });
+                }
             });
         }
         var getimgsources = {
+
             unsplash: {
-                mainaddress:"unsplash.com",
+                mainaddress: "unsplash.com",
                 getbykeypage: unsplashgetresultbykeypage, objtourl: (obj, cb) =>
                 {
                     cb(obj.url);
@@ -68,14 +123,14 @@
                 {
                     cb("http://wallpaperswide.com/download/" + obj.realid + "-1920x1080.html")
                 }
-            },
+            }/*,
             reddit: {
                 mainaddress: "reddit.com",
                 getbykeypage: redditgetresultbykeypage, objtourl: (obj, cb) =>
                 {
                     cb(obj.url);
                 }
-            }
+            }*/
 
         };
         function getimgfromsource(source, keyword, cb)
@@ -84,11 +139,17 @@
             {
                 source.getbykeypage(keyword, String(page + 1), (results) =>
                 {
+
                     var imgs = results.imgs;
-                    var foundit = false;
-                    imgs.forEach((img) =>
+                    if (results.quit || imgs.length < 1)
                     {
-                        if (!foundit && db.alreadysaw.indexOf(img.id) < 1)
+                        cb(false);
+                        return;
+                    }
+                    var foundit = false;
+                    imgs.forEach && imgs.forEach((img) =>
+                    {
+                        if (!foundit && db.alreadysaw.indexOf(img.id) < 0)
                         {
                             source.objtourl(img, (url) => { img.url = url; cb({ img: img }); });
                             foundit = true;
@@ -101,71 +162,99 @@
             }
             checknextpage(0);
         }
-        
-        function getimageurl(cb)
+
+        function getimageurl(cb, triedsources = [], keyword, triedkeywords = [])
         {
-            var triedsources = [];
-            var sources = Object.keys(getimgsources);
+
+            if (Object.keys(getimgsources).length == triedsources.length)
+            {
+                triedkeywords.push(keyword);
+                keyword = undefined;
+                triedsources = [];
+            }
+            var sources = Object.keys(getimgsources).filter((x) => { return triedsources.indexOf(x) < 0; });
             var source = sources[Math.floor(Math.random() * sources.length)];
             triedsources.push(source);
             var source = getimgsources[source];
-            var keyword = keywords[Math.floor(Math.random() * keywords.length)];
+            var keywords = item.data.keywords;
+            keywords = JSON.parse(JSON.stringify(keywords)).filter((x) => { return triedkeywords.indexOf(x) < 0; });
+            if (keywords.length < 1)
+            {
+                cb(null);
+                return;
+            }
+                
+
+            keyword = keyword || keywords[Math.floor(Math.random() * keywords.length)];
             checksite(source.mainaddress, (isup) =>
             {
                 if (isup)
                 {
-                    getimgfromsource(source, keyword, (data) => { cb(data); });
+                    getimgfromsource(source, keyword, (data) => { if (!data || data.e) setTimeout(() => { getimageurl(cb, triedsources, keyword, triedkeywords); }, 200); else cb(data); });
                 }
                 else
-                    getimageurl(cb);
+                    setTimeout(() => { getimageurl(cb, triedsources, keyword, triedkeywords); }, 1000);
             })
-            
+
 
         }
         var filecountlimit = 20;
+        var saving = false;
+        var online = true;
+        window.addEventListener('online', () => { online = true; })
+        window.addEventListener('offline', () => { online = false });
         function savedb()
         {
-            fs.writeFile(__dirname + "\\db.json", JSON.stringify(db), () =>
+            if (!saving)
             {
-                //https://stackoverflow.com/a/23022459
-                fs.readdir(__dirname + "\\images\\", function (err, files)
+                saving = true;
+                fs.writeFile(__dirname + "\\db.json", JSON.stringify(db), () =>
                 {
-                    if (err)
-                        return;
-                    var arr_files = [], leftcount = 0;
-                    leftcount = files.length;
-                    if (leftcount < filecountlimit)
-                        return;
-                    files.forEach(function (file, index)
+                    saving = false;
+                    //https://stackoverflow.com/a/23022459
+                    fs.readdir(__dirname + "\\images\\", function (err, files)
                     {
-
-                        fs.stat(path.join(__dirname + "\\images\\", file), function (err, stat)
+                        if (err)
+                            return;
+                        var arr_files = [], leftcount = 0;
+                        leftcount = files.length;
+                        if (leftcount < filecountlimit)
+                            return;
+                        files.forEach(function (file, index)
                         {
-                            leftcount--;
-                            if (err)
-                            {
-                                console.error(err);
-                                return;
-                            }
-                            arr_files.push({ time: new Date(stat.ctime).getTime(), file: file });
-                            if (leftcount === 0)
-                            {
-                                arr_files.sort((a, b) => { return b.time - a.time; });
-                                arr_files.forEach((file, i) =>
-                                {
-                                    if (i > filecountlimit)
-                                    {
 
-                                        fs.unlink(path.join(__dirname + "\\images\\", file.file), () => { });
-                                    }
-                                });
-                            }
+                            fs.stat(path.join(__dirname + "\\images\\", file), function (err, stat)
+                            {
+                                leftcount--;
+                                if (err)
+                                {
+                                    console.error(err);
+                                    return;
+                                }
+                                arr_files.push({ time: new Date(stat.ctime).getTime(), file: file });
+                                if (leftcount === 0)
+                                {
+                                    arr_files.sort((a, b) => { return b.time - a.time; });
+                                    arr_files.forEach((file, i) =>
+                                    {
+                                        if (i > filecountlimit)
+                                        {
+
+                                            fs.unlink(path.join(__dirname + "\\images\\", file.file), () => { });
+                                        }
+                                    });
+                                }
+                            });
                         });
                     });
                 });
-            });
+            }
+            else
+            {
+                setTimeout(savedb, 100);
+            }
         }
-        function checksite(address,cb)
+        function checksite(address, cb)
         {
             var http = require("http");
             http.get("http://" + address, function (res)
@@ -176,54 +265,6 @@
                 cb(false);
             });
         }
-        function changewallpaper()
-        {
-            getimageurl((res) =>
-            {
-                var img = res.img;
-                download(img.url, __dirname + "\\images\\" + img.id, (err, filename) =>
-                {
-                    if (!err)
-                    {
-
-
-
-                        document.querySelector("img").src = filename;
-                        db.alreadysaw.push(img.id);
-                        db.currentimg = __dirname + "\\images\\" + img.id;
-                        savedb();
-                    }
-                    else
-                        console.error(err);
-                });
-            });
-        }
-
-
-        //https://stackoverflow.com/a/30003234
-        var download = function (uri, filename, callback)
-        {
-            request.head(uri, function (err, res, body)
-            {
-                if (err) callback(err, filename);
-                else
-                {
-                    var stream = request(uri);
-                    stream.pipe(
-                        fs.createWriteStream(filename)
-                            .on('error', function (err)
-                            {
-                                callback(error, filename);
-                                stream.read();
-                            })
-                    )
-                        .on('close', function ()
-                        {
-                            callback(null, filename);
-                        });
-                }
-            });
-        };
         function urlencode(str)
         {
             str = (str + '')
@@ -238,51 +279,495 @@
                 .
                 replace(/\)/g, '%29')
                 .replace(/\*/g, '%2A')
-                .replace("%20","+")
+                .replace("%20", "+")
         }
+        var globinterval = { obj: null, time: null };
+        var scheduler =
+            {
+                lastchange: null,
+                getremaining: () =>
+                {
+                    var rem, i = 0;
+                    /*
+                    do
+                    {
+                    */
+                    rem = globinterval.time * (++i) - (Date.now() - (scheduler.lastchange || Date.now() - 1000 * 60 * 60 * 24))
+                    /*
+                }
+                while (rem < 0)
+                    */
+                    return rem;
+                },
+                justchanged: () =>
+                {
+                    scheduler.lastchange = Date.now();
+
+                },
+                setimg: () =>
+                {
+                    if (scheduler.isspeedupdl)
+                        progress.hide();
+                    if (db.readyimg)
+                    {
+
+                        db.currentimg = __dirname + "\\images\\" + db.readyimg.id;
+                        document.querySelector("img").src = "";
+                        document.querySelector("img").src = db.currentimg;
+                        scheduler.isspeedupdl = false;
+                        scheduler.needimgnow = false;
+                        scheduler.justchanged();
+
+                        db.readyimg = null;
+
+                        savedb();
+                        if (scheduler.onchange)
+                        {
+                            scheduler.onchange();
+                            scheduler.onchange = undefined;
+                        }
+                    }
+                    else
+                        scheduler.needimgnow = true;
+
+                },
+                needimgnow: false,
+                imgisready: (img) =>
+                {
+                    db.readyimg = img;
+                    db.alreadysaw.push(db.readyimg.id);
+                    savedb();
+                    if (scheduler.isspeedupdl)
+                        scheduler.setimg();
+                },
+                isspeedupdl: false,
+                shouldspeedupdl: false,
+                speedupdl: () =>
+                {
+                    if (!scheduler.isspeedupdl)
+                        scheduler.shouldspeedupdl = true;
+                },
+                speededupdl: () =>
+                {
+                    scheduler.isspeedupdl = true;
+                    scheduler.shouldspeedupdl = false;
+                },
+                start: () =>
+                {
+                    setInterval(() =>
+                    {
+                        if (scheduler.getremaining() < 0)
+                        {
+                            scheduler.needimgnow = true;
+                        }
+                        if (scheduler.needimgnow)
+                        {
+                            if (db.readyimg)
+                                scheduler.setimg();
+                            else
+                                scheduler.speedupdl();
+                        }
+                        if (!db.readyimg && !req.issearching)
+                        {
+                            getandsetnewimg();
+                        }
+                        if (!scheduler.isspeedupdl)
+                        {
+                            if (scheduler.shouldspeedupdl)
+                            {
+                                if (db.readyimg)
+                                {
+                                    scheduler.speededupdl();
+                                    scheduler.setimg();
+
+                                }
+                                else
+                                    if (req.lim)
+                                    {
+                                        req.lim.bps = 1024 * 1024 * 1024;
+                                        scheduler.speededupdl();
+                                    }
+                            }
+                            else
+                            {
+                                if (req.lim)
+                                {
+                                    req.lim.bps = req.calcspeed();
+                                }
+                            }
+                        }
+                    }, 1000);
+                    getandsetnewimg();
+                }
+            };
+
+        var keywords = [];
         function setkeywords(_keywords)
         {
-            keywords = _keywords.map(urlencode);
+            item.data.keywords = _keywords.map(urlencode);
         }
-        var globinterval;
-        function setinterval(time)
+        var req = {};
+        function getandsetnewimg()
         {
-            if (globinterval)
-                clearInterval(globinterval);
-            globinterval=setInterval(changewallpaper, time);
+            req.issearching = true;
+            getimageurl((opts) =>
+            {
+                if (!opts)
+                {
+                    req = {};
+                    setTimeout(getandsetnewimg, 1000);
+                    return;
+                }
+                var img = opts.img;
+                req.img = img;
+                request.head(img.url, function (err, res, body)
+                {
+                    if (err)
+                    {
+                        console.log(err);
+                        setTimeout(getandsetnewimg, 1000);
+                        req.issearching = true;
+                    }
+                    else
+                    {
+                        try
+                        {
+                            var filelen = res.headers['content-length'];
+                            filelen = filelen && parseInt(filelen);
+                            req.calcspeed = () =>
+                            {
+                                var remainingsec = Math.max(0, scheduler.getremaining() / 1000) * 0.8;
+                                var speedlimit = remainingsec && filelen / remainingsec;
+                                speedlimit = Math.max(0, speedlimit);
+                                return (!speedlimit ? 1024 * 1024 * 1024 : speedlimit);
+                            };
+                            var limiter = new throttle({ bps: req.calcspeed(), chunkSize: Math.min(filelen, 1000) });
+                            req.lim = limiter;
+                            var progressed = 0;
+                            var stream = request(img.url)
+                            req.request = stream;
+                            stream.on('data', function (chunk)
+                            {
+                                progressed += chunk.length;
+                                var percent = progressed / filelen * 100;
+                                progress.setpercent(percent);
+                            });
+                            if (fs.existsSync(__dirname + "\\images\\" + img.id))
+                                fs.unlinkSync(__dirname + "\\images\\" + img.id);
+                            stream.pipe(limiter).pipe(
+                                fs.createWriteStream(__dirname + "\\images\\" + img.id)
+                                    .on('error', function (err)
+                                    {
+                                        console.log(err);
+                                        req = {};
+                                        setTimeout(getandsetnewimg, 1000);
+                                        req.issearching = true;
+                                    }))
+                                .on('finish', function ()
+                                {
+                                    if (progressed == filelen)
+                                    {
+                                        req.lim = undefined;
+                                        scheduler.imgisready(req.img);
+                                        req = {};
+                                    }
+                                    else
+                                    {
+                                        req = {};
+                                        setTimeout(getandsetnewimg, 1000);
+                                        req.issearching = true;
+                                    }
+                                }).on('error', function (err)
+                                {
+                                    console.log(err);
+                                    req = {};
+                                    setTimeout(getandsetnewimg, 1000);
+                                    req.issearching = true;
+                                });
+                        }
+                        catch (e)
+                        {
+                            console.log(e);
+                            req = {};
+                            setTimeout(getandsetnewimg, 1000);
+                            req.issearching = true;
+                        }
+                    }
+                });
+            });
         }
+        var item = {};
         window.addEventListener("load", () =>
         {
-            displayus.getItem((item) =>
+            displayus.getItem((itemi) =>
             {
+                itemi = itemi || { "label": "Wallpaperus", "id": "wus234435", "data": { "interval": 60000, "keywords": ["jungle", "lake", "nature", "animal", "cat"] }, "description": "", "icon": "" };
+                item = itemi;
+                globinterval.time = item.data.interval;
+                document.querySelector("img").onload = () => { setimgfit("fill"); };
+
                 displayus.addEventListener("itemchange", function (arg)
                 {
+
+                    if (JSON.stringify(arg.item.data.keywords) !== JSON.stringify(item.data.keywords))
+                    {
+                        scheduler.speedupdl();
+                        scheduler.onchange = scheduler.speedupdl;
+                    }
                     setkeywords(arg.item.data.keywords);
-                    setinterval(arg.item.data.interval);
-                    changewallpaper();
+                    globinterval.time = arg.item.data.interval;
                 });
                 setkeywords(item.data.keywords);
                 displayus.registernClick((eventdata) =>
                 {
-                    console.log(eventdata);
                     if (eventdata.ondesktop && !eventdata.cursoriconpointing.onicon)
-                        changewallpaper();
-                }, 3, 300);
+                    {
+                        if (!progress.isshown)
+                        {
+                            progress.show();
+                            scheduler.speedupdl();
+                        }
+                    }
+                }, 2, 300);
                 if (db.currentimg)
                 {
                     document.querySelector("img").src = db.currentimg;
+                    scheduler.justchanged();
                 }
-                else
-                changewallpaper();
+                scheduler.start();
                 savedb();
+
+            });
+        });
+        /*
+        function setinterval(time)
+        {
+            if (globinterval.obj)
+                clearInterval(globinterval.obj);
+            globinterval.obj = setInterval(() => { if (!customsetting) reqchangewall("interval"); }, time);
+            globinterval.time = time;
+        }
+
+        var needtochange = false;
+        var globinterval = { obj: null, time: null };
+
+        var needtochangenow = false;
+        function reqchangewall(from)
+        {
+
+            if (db.readyimg)
+            {
+                var imgpath = __dirname + "\\images\\" + db.readyimg.id;
+                document.querySelector("img").src = imgpath;
+                scheduler.justchanged();
+                db.alreadysaw.push(db.readyimg.id);
+                db.currentimg = imgpath;
+                db.readyimg = undefined;
+                savedb();
+                checksetdlstatus();
+            }
+            else
+                if (!needtochangenow)
+                {
+                    needtochangenow = true;
+                    checksetdlstatus();
+                }
+        }
+        var downloading = {
+            request: null, img: null, isdling: () => { return !!downloading.request; }, destroy: (force) =>
+            {
+                //if (!downloading.isdling() && !force)
+                //    return;
+                downloading.request.abort();
+                downloading.request = null;
+                downloading.img = null;
+            }
+        };
+        var scheduler =
+            {
+                lastchange: null,
+                getremaining: () =>
+                {
+                    var rem, i = 0;
+                    do
+                    {
+                        rem = globinterval.time * (++i) - (Date.now() - (scheduler.lastchange || Date.now()))
+                    }
+                    while (rem < 0)
+
+                    return rem;
+                },
+                justchanged: () =>
+                {
+                    scheduler.lastchange = Date.now();
+                }
+            };
+        var throttle = require("throttle");
+        var lim;
+        var customsetting = false;
+        function checksetdlstatus(force, nolimit)
+        {
+            var isdling = downloading.isdling();
+            if (force || (!isdling && !db.readyimg))
+            {
+                if (isdling)
+                {
+                    downloading.destroy();
+                }
+                //////
+                getimageurl((opts) =>
+                {
+                    var img = opts.img;
+                    downloading.img = img;
+                    request.head(img.url, function (err, res, body)
+                    {
+
+                        if (err)
+                        {
+                            console.log(err);
+                            downloading.destroy();
+                            checksetdlstatus(force, nolimit);
+                        }
+                        else
+                        {
+                            try
+                            {
+                                var filelen = res.headers['content-length'];
+                                filelen = filelen && parseInt(filelen);
+                                var remainingsec = Math.max(0, scheduler.getremaining() / 1000) * 0.8;
+                                speedlimit = remainingsec && filelen / remainingsec;
+                                console.log(remainingsec);
+                                console.log(speedlimit);
+                                console.log(nolimit || !speedlimit ? 1024 * 1024 * 1024 : speedlimit);
+                                var limiter = new throttle(nolimit || !speedlimit ? 1024 * 1024 * 1024 : speedlimit);
+
+                                var progressed = 0;
+                                var stream = request(img.url)
+                                downloading.request = stream;
+                                stream.on('data', function (chunk)
+                                {
+                                    if (!this.first)
+                                    {
+                                        lim = limiter;
+                                        this.first = true;
+                                    }
+                                    progressed += chunk.length;
+                                    var percent = progressed / filelen * 100;
+                                        progress.setpercent(percent);
+                                });;
+                                if (fs.existsSync(__dirname + "\\images\\" + img.id))
+                                    fs.unlinkSync(__dirname + "\\images\\" + img.id);
+                                stream.pipe(limiter).pipe(
+                                    fs.createWriteStream(__dirname + "\\images\\" + img.id)
+                                        .on('error', function (err)
+                                        {
+                                            downloading.destroy();
+                                            checksetdlstatus(force, nolimit);
+                                        }))
+                                    .on('finish', function ()
+                                    {
+                                        lim = undefined;
+                                        db.readyimg = downloading.img;
+                                        savedb();
+                                        downloading.request = undefined;
+
+                                        if (needtochangenow)
+                                        {
+                                            needtochangenow = false;
+                                            reqchangewall();
+                                        }
+                                        if (customsetting)
+                                        {
+                                            progress.hide();
+                                            customsetting = false;
+                                            setinterval(globinterval.time);
+                                            reqchangewall();
+
+                                        }
+                                    });
+                            }
+                            catch (e)
+                            {
+                                console.log(e);
+                                downloading.destroy();
+                                checksetdlstatus(force, nolimit);
+                            }
+                        }
+                    });
+                });
+
+                //////
+            }
+        }
+        window.addEventListener("load", () =>
+        {
+            displayus.getItem((Item) =>
+            {
+                item = Item || { "label": "Wallpaperus", "id": "wus234435", "data": { "interval": 60000, "keywords": ["jungle", "lake", "nature", "animal", "cat"] }, "description": "", "icon": "" };
                 setinterval(item.data.interval);
+                displayus.addEventListener("itemchange", (opts) =>
+                {
+                    newitem = opts.item;
+                    if (JSON.stringify(newitem.data.keywords) !== JSON.stringify(item.data.keywords) || newitem.data.interval !== item.data.interval)
+                    {
+                        reqchangewall("itemchange");
+                    }
+                    checksetdlstatus(true);
+                    item = newitem;
+                });
+                if (db.currentimg)
+                {
+                    document.querySelector("img").src = db.currentimg;
+                    scheduler.justchanged();
+                }
+                checksetdlstatus(!db.currentimg);
+                displayus.registernClick((eventdata) =>
+                {
+                    if (eventdata.ondesktop && !eventdata.cursoriconpointing.onicon)
+                    {
+                        progress.show();
+                        if (db.readyimg)
+                        {
+                            reqchangewall();
+                            progress.hide();
+                        }
+                        else
+                        {
+                            customsetting = true;
+                            function checklim()
+                            {
+                                if (lim)
+                                    lim.bps = 1024 * 1024 * 1024;
+                                else
+                                    setTimeout(checklim, 200);
+                            }
+                            setTimeout(checklim, 200);
+                            checksetdlstatus();
+                        }
+
+                    }
+                }, 2, 350);
             });
 
         });
-
+        */
+        function setimgfit(mode)
+        {
+            var elem = document.querySelector("img");
+            if (mode == "fill")
+            {
+                var maxval = Math.max(innerHeight / parseFloat(elem.height), innerWidth / parseFloat(elem.width))
+                elem.style.transform = "translateX(-50%) translateY(-50%) scale(" + maxval + ")";
+            }
+        }
     </script>
 </head>
 <body>
-    <img src="" style="width:100%;height:100%;position:fixed;left:0;top:0;" />
+    <img src="" style="left:50%;top:50%;transform:translateX(-50%) translateY(-50%);position:fixed;background-color: white;" />
+    <div id="progresscont" style="bottom:100px;right:100px;height:200px;width:200px;position:fixed;transition:opacity 0.5s;opacity:0;">
+        <div id="progress" style="background-color:rgb(0, 185, 255);top:128.8px;left:45.8px;width:110.09px;position:absolute;z-index:-1;transition:top 0.2s, height 0.2s;"></div>
+        <img style="width:100%;height:100%;" src="logo.png" />
+
+    </div>
 </body>
 </html>

@@ -1,13 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <script>
+         $ = require("./js/jquery-3.1.1.min.js");
+         jQuery = $;
+    </script>
+    <link href="settings template/displayusplugins.css" rel="stylesheet" />
+    <link href="settings template/transition.min.css" rel="stylesheet" />
+    <script src="settings template/transition.min.js"></script>
+    <link href="settings template/waves.min.css" rel="stylesheet" />
+    <script src="settings template/waves.min.js"></script>
+    <link href="settings template/dropdown.min.css" rel="stylesheet" />
+    <script src="settings template/dropdown.min.js"></script>
+    <script src="settings template/displayusplugins.js"></script>
     <link href="css/flat-ui.min.css" rel="stylesheet" />
     <link href="css/tag-basic-style.css" rel="stylesheet" />
     <link href="css/screen.css" rel="stylesheet" />
-    <script>
-        $ = require("./js/jquery-3.1.1.min.js");
-        jQuery = $;
-    </script>
+   
     <script src="js/tagging.js"></script>
 <style>
     #keywords
@@ -24,6 +33,25 @@
     }
     .tag {
         padding: 0px 30px 0px 0px !important;
+    }
+   
+    button,b
+    {
+        font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    button
+    {
+        width:120px;
+        height:50px;
+    }
+    b
+    {
+        color:rgb(0, 23, 72);
+        text-shadow:rgba(255,255,255,0.2) 0px 0px 3px;
+    }
+    body
+    {
+        padding:10px;
     }
 </style>
     <script>
@@ -55,10 +83,10 @@
     </script>
 </head>
 <body style="background-color:rgba(255,255,255,0.3)">
-    <b>Change Interval: </b><br/><input type="text" style="height:25px;" placeholder="URL" class="form-control" id="interval" />
-    <br/><br /><b>KeyWords: </b>
-    <div id="keywords"></div><br/><br />
-    <button class="btn btn-block btn-lg btn-primary" onclick="done()" id="clickbutton">Done</button>
-    <button class="btn btn-block btn-lg btn-danger" onclick="displayus.cancel()">Cancel</button>
+    <b>Change Interval: </b><br/><input type="text" style="height:25px;" placeholder="URL" class="dusplugintempl  shadowinp" id="interval" />
+    <br/><br /><b>Keywords: </b><br />
+    <div id="keywords"></div><br/>
+    <button class="dusplugintempl" style="background-color:rgb(83, 247, 76);" onclick="done()" id="clickbutton">Done</button>
+    <button class="dusplugintempl" style="position:relative;float:right;background-color:rgb(254, 68, 49);" onclick="displayus.cancel()">Cancel</button>
 </body>
 </html>
