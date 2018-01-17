@@ -1,5 +1,4 @@
 ## Displayus
-**NOTE** : **Displayus is not released yet, it will become available at http://Displayus.org once it is released**
 ### Introduction
 [![Displayus Logo](http://displayus.org/Logo/256.png)](http://displayus.org/)<br/><br/>
 Displayus is an advanced plugin based live wallpaper program which will to bring your desktop to life.<br/>
@@ -9,7 +8,7 @@ It is written using C# and [Electron](http://electron.atom.io/)(Node.js, HTML an
 
 Download latest version of Displayus from our website: [Displayus.org](http://Displayus.org/)
 
-Current Displayus Version: `0.1.0-beta`<br/><br/>
+Current Displayus Version: `0.1.2-beta`<br/><br/>
 _Note: Displayus is currently in beta phase, so if you encounter any problem submit issue [here](https://github.com/displayus/displayus/issues/)._
 ## Features
 
@@ -19,6 +18,7 @@ _Note: Displayus is currently in beta phase, so if you encounter any problem sub
 * **Easy Management** : Easily preview, select, edit, delete or make wallpaper items from plugins.
 * **Web Plugin** : Pre-installed web plugin to set a website as your desktop background.
 * **Media Plugin** : Pre-installed media plugin to set a video file, gif or image file as your desktop background.
+* **Wallpaperus Plugin** : Pre-installed wallpaper plugin to download and show different wallpapers based on your chosen favorite tags. 
 * **Sound Visualization Plugins** : You can set sound visualization plugins as your background and play a music on your computer to use them.
 * **Fullscreen Detection** : Wallpapers automatically stop doing heavy operations when a fullscreen program like a game is open.
 * **Interactive Backgrounds** : You can interact with backgrounds on your desktop.
