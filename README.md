@@ -37,7 +37,7 @@ Read development documentation [here](http://displayus.org/dev/docs/).
 * Your developed plugins can be added to official website or as a pre-installed plugin to app, contact me if you want it to be added.
 
 
-**Note* : More programming languages are planned to be added, if you want next language to be your favorite one email me: [DisplayusProject@gmail.com](mailto:DisplayusProject@gmail.com)
+**Note* : More programming languages are planned to be added, if you want next language to be your favorite one email me: [contact@mohsenyousefian.com](mailto:contact@mohsenyousefian.com)
 
 ## Licence
-Copyright © 2017 Manzik. All Rights Reserved.
+Copyright Â© 2017 Manzik. All Rights Reserved.
